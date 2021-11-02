@@ -85,14 +85,14 @@
  */
 #define ADBG_CRC_POLY			0xedb88320
 
-/* These are for the internal registers in the Wishbone module
+/* These are for the internal registers in the SystemBus module
  * The first is the length of the index register,
  * the indexes of the various registers are defined after that.
  */
 #define DBG_SYSBUS_REG_SEL_LEN		1
 #define DBG_SYSBUS_REG_ERROR		0
 
-/* Opcode definitions for the Wishbone module. */
+/* Opcode definitions for the SystemBus module. */
 #define DBG_SYSBUS_OPCODE_LEN		4
 #define DBG_SYSBUS_CMD_NOP		0x0
 #define DBG_SYSBUS_CMD_BWRITE8		0x1
@@ -106,9 +106,12 @@
 #define DBG_SYSBUS_CMD_IREG_WR		0x9
 #define DBG_SYSBUS_CMD_IREG_SEL		0xd
 
-/* Internal register definitions for the CP0 module. */
+/* Internal register definitions for the CP module. */
 #define DBG_CPU_REG_SEL_LEN		1
 #define DBG_CPU_REG_STATUS		0
+
+/* CPU Select */
+#define DBG_CPU_CPUSEL_LEN		4
 
 /* Opcode definitions for the CPU module. */
 #define DBG_CPU_OPCODE_LEN		4
@@ -246,7 +249,7 @@ static int adbg_select_module(struct rl_jtag *jtag_info, int chain)
  */
 static int adbg_select_ctrl_reg(struct rl_jtag *jtag_info, uint8_t regidx)
 {
-	int index_len;
+	int      index_len;
 	uint32_t opcode;
 	uint32_t opcode_len;
 
@@ -295,7 +298,9 @@ static int adbg_select_ctrl_reg(struct rl_jtag *jtag_info, uint8_t regidx)
 static int adbg_ctrl_write(struct rl_jtag *jtag_info, uint8_t regidx,
 			   uint32_t *cmd_data, int length_bits)
 {
-	int index_len;
+	int      index_len;
+	int      cpusel_len;
+	int      cpusel;
 	uint32_t opcode;
 	uint32_t opcode_len;
 
@@ -310,31 +315,36 @@ static int adbg_ctrl_write(struct rl_jtag *jtag_info, uint8_t regidx,
 	switch (jtag_info->rl_jtag_module_selected) {
 	case DC_SYSBUS:
 		index_len  = DBG_SYSBUS_REG_SEL_LEN;
+		cpusel     = 0;
+		cpusel_len = 0;
 		opcode     = DBG_SYSBUS_CMD_IREG_WR;
 		opcode_len = DBG_SYSBUS_OPCODE_LEN;
 		break;
 	case DC_CPU:
 		index_len  = DBG_CPU_REG_SEL_LEN;
+		cpusel     = jtag_info->rl_jtag_cpu_selected;
+		cpusel_len = DBG_CPU_CPUSEL_LEN;
 		opcode     = DBG_CPU_CMD_IREG_WR;
 		opcode_len = DBG_CPU_OPCODE_LEN;
 		break;
 	default:
 		LOG_ERROR("Illegal debug chain selected (%i) while doing control write",
-			  jtag_info->or1k_jtag_module_selected);
+			  jtag_info->rl_jtag_module_selected);
 		return ERROR_FAIL;
 	}
 
 	struct scan_field field[2];
 
 	/* MSB must be 0 to access modules */
-	uint32_t data = (opcode & ~(1 << opcode_len)) << index_len;
+	uint32_t data = ~(1 << (opcode_len + cpusel_len + index_len));
+	data &= (((opcode << cpusel_len) | cpusel ) << index_len);
 	data |= regidx;
 
 	field[0].num_bits  = length_bits;
 	field[0].out_value = (uint8_t *)cmd_data;
 	field[0].in_value  = NULL;
 
-	field[1].num_bits  = (opcode_len + 1) + index_len;
+	field[1].num_bits  = 1+ opcode_len + cpusel_len + index_len;
 	field[1].out_value = (uint8_t *)&data;
 	field[1].in_value  = NULL;
 
@@ -354,27 +364,32 @@ static int adbg_ctrl_read(struct rl_jtag *jtag_info, uint32_t regidx,
 		return retval;
 	}
 
+	int cpusel_len;
 	int opcode_len;
 	uint32_t opcode;
 
 	/* There is no 'read' command, We write a NOP to read */
 	switch (jtag_info->rl_jtag_module_selected) {
 	case DC_SYSBUS:
+		cpusel_len = 0;
 		opcode     = DBG_SYSBUS_CMD_NOP;
 		opcode_len = DBG_SYSBUS_OPCODE_LEN;
 		break;
 	case DC_CPU:
+		cpusel     = jtag_info->rl_jtag_cpu_selected;
+		cpusel_len = DBG_CPU_CPUSEL_LEN;
 		opcode     = DBG_CPU_CMD_NOP;
 		opcode_len = DBG_CPU_OPCODE_LEN;
 		break;
 	default:
 		LOG_ERROR("Illegal debug chain selected (%i) while doing control read",
-			  jtag_info->or1k_jtag_module_selected);
-		 return ERROR_FAIL;
+			  jtag_info->rl_jtag_module_selected);
+		return ERROR_FAIL;
 	}
 
 	/* Zero MSB = op for module, not top-level debug unit */
-	uint32_t outdata = opcode & ~(0x1 << opcode_len);
+	uint32_t outdata = ~(1 << (opcode_len + cpusel_len));
+	outdata &= (opcode << cpusel_len) | cpusel;
 
 	struct scan_field field[2];
 
@@ -394,22 +409,60 @@ static int adbg_ctrl_read(struct rl_jtag *jtag_info, uint32_t regidx,
 /* sends out a burst command to the selected module in the debug unit (MSB to LSB):
  * 1-bit module command
  * 4-bit opcode
- * 32-bit address
+ * 4-bit CPU (optional)
+ * 32/64-bit address
  * 16-bit length (of the burst, in words)
  */
-static int adbg_burst_command(struct rl_jtag *jtag_info, uint32_t opcode,
-			      uint32_t address, uint16_t length_words)
+static int adbg_burst_command(struct rl_jtag *jtag_info,
+			      uint32_t opcode, uint8_t opcode_len,
+			      uint32_t address, uint8_t address_len,
+			      uint32_t cpusel, uint8_t cpusel_len,
+			      uint16_t length_words)
 {
-	uint32_t data[2];
+	uint32_t bitcount;
+	uint32_t data[3];
 
+
+	/* Total bitcount */
+        bitcount  = 1;            //1bit module command
+	bitcount += opcode_len;   //4bit opcode
+	bitcoutn += cpusel_len;   //4bit CPU select
+	bitcount += address_len;  //Address
+	bitcount += 16;           //Burst Length
+
+	
 	/* Set up the data */
-	data[0] = length_words | (address << 16);
-	/* MSB must be 0 to access modules */
-	data[1] = ((address >> 16) | ((opcode & 0xf) << 16)) & ~(0x1 << 20);
+	switch (address_len) {
+	case 32: 
+		data[0] = (address << 16) | length_words;
+		data[1] = opcode;
+		if (cpusel_len) {
+			data[1] = (data[1] << cpusel_len) | cpusel;
+		}
+		data[1] = (data[1] << 16) | (address >> 16);
 
+		/* MSB must be 0 to access modules */		
+		data[1] &= ~(1 << (16 + cpusel_len + opcode_len));
+		break;
+	case 64:
+		data[0] = (address << 16) | length_words;
+		data[1] = address >> 16;
+		data[2] = opcode;
+		if (cpusel_len) {
+			data[2] = (data[2] << cpusel_len) | cpusel;
+		}
+		data[2] = (data[2] << 16) | (address >> 48);
+		
+		data[2] &= ~(1 << (16 + cpusel_len + opcode_len));
+		break;
+	default:
+		LOG_ERROR("Unsupported address-length (%i)", address_len);
+		return ERROR_FAIL;
+	}
+	
 	struct scan_field field;
 
-	field.num_bits  = 53;
+	field.num_bits  = bitcount;
 	field.out_value = (uint8_t *)&data[0];
 	field.in_value  = NULL;
 
@@ -424,7 +477,13 @@ static int adbg_sysbus_burst_read(struct rl_jtag *jtag_info, int size,
 	int retry_full_crc = 0;
 	int retry_full_busy = 0;
 	int retval;
+
 	uint8_t opcode;
+	uint8_t opcode_len;
+	uint8_t cpusel;
+	uint8_t cpusel_len;
+	uint8_t address_len;
+
 
 	LOG_DEBUG("Doing burst read, word size %d, word count %d, start address 0x%08" PRIx32,
 		  size, count, start_address);
@@ -445,6 +504,8 @@ static int adbg_sysbus_burst_read(struct rl_jtag *jtag_info, int size,
 				  "defaulting to 4-byte words", size);
 			opcode = DBG_SYSBUS_CMD_BREAD32;
 		}
+		opcode_len = DBG_SYSBUS_OPCODE_LEN;
+		cpusel_len = 0;
 		break;
 	case DC_CPU:
 		if (size == 4)
@@ -454,12 +515,17 @@ static int adbg_sysbus_burst_read(struct rl_jtag *jtag_info, int size,
 				  "defaulting to 4-byte words", size);
 			opcode = DBG_CPU_CMD_BREAD32;
 		}
+		opcode_len = DBG_CPU_OPCODE_LEN;
+		cpusel     = jtag_info->rl_jtag_cpu_selected;
+                cpusel_len = DBG_CPU_CPUSEL_LEN;
 		break;
 	default:
 		LOG_ERROR("Illegal debug chain selected (%i) while doing burst read",
 			  jtag_info->rl_jtag_module_selected);
 		return ERROR_FAIL;
 	}
+	address_len = jtag_info->rl_jtag_address_size;
+
 
 	int total_size_bytes = count * size;
 	struct scan_field field;
@@ -468,7 +534,10 @@ static int adbg_sysbus_burst_read(struct rl_jtag *jtag_info, int size,
 retry_read_full:
 
 	/* Send the BURST READ command, returns TAP to idle state */
-	retval = adbg_burst_command(jtag_info, opcode, start_address, count);
+//	retval = adbg_burst_command(jtag_info, opcode, start_address, count);
+	retval = adbg_burst_command(jtag_info, opcode, opcode_len,
+		       		    start_address, address_len, cpusel, cpusel_len, count);
+
 	if (retval != ERROR_OK)
 		goto out;
 
@@ -567,18 +636,24 @@ out:
 }
 
 /* Set up and execute a burst write to a contiguous set of addresses */
-static int adbg_sysbusb_burst_write(struct rl_jtag *jtag_info, const uint8_t *data, int size,
+static int adbg_sysbus_burst_write(struct rl_jtag *jtag_info, const uint8_t *data, int size,
 				    int count, unsigned long start_address)
 {
 	int retry_full_crc = 0;
 	int retval;
+
 	uint8_t opcode;
+	uint8_t opcode_len;
+	uint8_t cpusel;
+	uint8_t cpusel_len;
+	uint8_t address_len;
+
 
 	LOG_DEBUG("Doing burst write, word size %d, word count %d,"
 		  "start address 0x%08lx", size, count, start_address);
 
 	/* Select the appropriate opcode */
-	switch (jtag_info->or1k_jtag_module_selected) {
+	switch (jtag_info->rl_jtag_module_selected) {
 	case DC_WISHBONE:
 		if (size == 1)
 			opcode = DBG_SYSBUS_CMD_BWRITE8;
@@ -593,6 +668,8 @@ static int adbg_sysbusb_burst_write(struct rl_jtag *jtag_info, const uint8_t *da
 				  "defaulting to 4-byte words", size);
 			opcode = DBG_SYSBUS_CMD_BWRITE32;
 		}
+		opcode_len = DBG_SYSBUS_OPCODE_LEN;
+		cpusel_len = 0;
 		break;
 	case DC_CPU:
 		if (size == 4)
@@ -602,17 +679,25 @@ static int adbg_sysbusb_burst_write(struct rl_jtag *jtag_info, const uint8_t *da
 				  "defaulting to 4-byte words", size);
 			opcode = DBG_CPU_CMD_BWRITE32;
 		}
+		opcode_len = DBG_CPU_OPCODE_LEN;
+		cpusel     = jtag_info->rl_jtag_cpu_selected;
+		cpusel_len = DBG_CPU_CPUSEL_LEN;
 		break;
 	default:
 		LOG_ERROR("Illegal debug chain selected (%i) while doing burst write",
 			  jtag_info->rl_jtag_module_selected);
 		return ERROR_FAIL;
 	}
+	address_len = jtag_info->rl_jtag_address_size;
+
 
 retry_full_write:
 
 	/* Send the BURST WRITE command, returns TAP to idle state */
-	retval = adbg_burst_command(jtag_info, opcode, start_address, count);
+//	retval = adbg_burst_command(jtag_info, opcode, start_address, count);
+	retval = adbg_burst_command(jtag_info, opcode, opcode_len,
+				    start_address, address_len, cpusel, cpusel_len, count);
+
 	if (retval != ERROR_OK)
 		return retval;
 
