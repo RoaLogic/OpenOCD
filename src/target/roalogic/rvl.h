@@ -159,6 +159,7 @@ enum gdb_regno {
 const char *gdb_regno_name(enum gdb_regno regno);
 
 
+/* moved to rl_dbg_adv.h
 struct rvl_jtag {
 	struct jtag_tap *tap;
 	int rvl_jtag_inited;
@@ -168,13 +169,14 @@ struct rvl_jtag {
 	struct rvl_du *du_core;
 	struct target *target;
 };
+*/
 
 struct rvl_common {
-	struct rvl_jtag jtag;
-	struct reg_cache *core_cache;
+	struct   rvl_jtag jtag;
+	struct   reg_cache *core_cache;
 	uint32_t core_regs[GBD_REGNO_COUNT];
-	int nb_regs;
-	struct rvl_core_reg *arch_info;
+	int      nb_regs;
+	struct   rvl_core_reg *arch_info;
 };
 
 static inline struct rvl_common *
