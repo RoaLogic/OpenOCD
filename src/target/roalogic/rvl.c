@@ -250,17 +250,25 @@ static int rvl_save_context(struct target *target)
 
 	LOG_DEBUG("-");
 
-	for (int i = 0; i < GDB_REG_XPR31; i++) {
-		if (!rvl->core_cache->reg_list[i].valid) {
-			if (i == OR1K_REG_PPC || i == OR1K_REG_NPC || i == OR1K_REG_SR) {
-				retval = du_core->or1k_jtag_read_cpu(&or1k->jtag,
-						or1k->arch_info[i].spr_num, 1,
-						&or1k->core_regs[i]);
+	for (int i = 0; i < GDB_REGNO_FPR0; i++) 
+    {
+		if (!rvl->core_cache->reg_list[i].valid) 
+        {
+            // Read the PC for the PPC
+		    if (i == GDB_REGNO_PC) 
+            {
+				retval = du_core->rvl_jtag_read_cpu(&rvl->jtag,
+                        // Read the PPC register
+						(GROUP_GPRS + 0x200), 1,
+						&rvl->core_regs[i]);
+
 				if (retval != ERROR_OK)
 					return retval;
-			} else if (!regs_read) {
+			} 
+            else if (!regs_read) 
+            {
 				/* read gpr registers at once (but only one time in this loop) */
-				retval = or1k_jtag_read_regs(or1k, or1k->core_regs);
+				retval = rvl_jtag_read_regs(rvl, rvl->core_regs);
 				if (retval != ERROR_OK)
 					return retval;
 				/* prevent next reads in this loop */
@@ -275,35 +283,42 @@ static int rvl_save_context(struct target *target)
 	return ERROR_OK;
 }
 
-static int or1k_restore_context(struct target *target)
+static int rvl_restore_context(struct target *target)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 	int reg_write = 0;
 	int retval;
 
 	LOG_DEBUG("-");
 
-	for (int i = 0; i < OR1KNUMCOREREGS; i++) {
-		if (or1k->core_cache->reg_list[i].dirty) {
-			or1k_write_core_reg(target, i);
+	for (int i = 0; i < GDB_REGNO_FPR0; i++) 
+    {
+		if (rvl->core_cache->reg_list[i].dirty) 
+        {
+			rvl_write_core_reg(target, i);
 
-			if (i == OR1K_REG_PPC || i == OR1K_REG_NPC || i == OR1K_REG_SR) {
-				retval = du_core->or1k_jtag_write_cpu(&or1k->jtag,
-						or1k->arch_info[i].spr_num, 1,
-						&or1k->core_regs[i]);
-				if (retval != ERROR_OK) {
+			if (i == GDB_REGNO_PC) 
+            {
+				retval = du_core->rvl_jtag_write_cpu(&rvl->jtag,
+                        // Write the PC to the NPC reg
+						(GROUP_GPRS + 0x201), 1,
+						&rvl->core_regs[i]);
+				if (retval != ERROR_OK) 
+                {
 					LOG_ERROR("Error while restoring context");
 					return retval;
-				}
-			} else
+			    }
+			} 
+            else
 				reg_write = 1;
 		}
 	}
 
-	if (reg_write) {
+	if (reg_write) 
+    {
 		/* read gpr registers at once (but only one time in this loop) */
-		retval = or1k_jtag_write_regs(or1k, or1k->core_regs);
+		retval = rvl_jtag_write_regs(rvl, rvl->core_regs);
 		if (retval != ERROR_OK) {
 			LOG_ERROR("Error while restoring context");
 			return retval;
@@ -313,75 +328,78 @@ static int or1k_restore_context(struct target *target)
 	return ERROR_OK;
 }
 
-static int or1k_read_core_reg(struct target *target, int num)
+static int rvl_read_core_reg(struct target *target, int num)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 	uint32_t reg_value;
 
 	LOG_DEBUG("-");
 
-	if ((num < 0) || (num >= or1k->nb_regs))
+	if ((num < 0) || (num >= rvl->nb_regs))
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	if ((num >= 0) && (num < OR1KNUMCOREREGS)) {
-		reg_value = or1k->core_regs[num];
-		buf_set_u32(or1k->core_cache->reg_list[num].value, 0, 32, reg_value);
+	if ((num >= 0) && (num < GBD_REGNO_COUNT)) 
+    {
+		reg_value = rvl->core_regs[num];
+		buf_set_u32(rvl->core_cache->reg_list[num].value, 0, 32, reg_value);
 		LOG_DEBUG("Read core reg %i value 0x%08" PRIx32, num, reg_value);
-		or1k->core_cache->reg_list[num].valid = true;
-		or1k->core_cache->reg_list[num].dirty = false;
-	} else {
+		rvl->core_cache->reg_list[num].valid = true;
+		rvl->core_cache->reg_list[num].dirty = false;
+	} 
+    else 
+    {
 		/* This is an spr, always read value from HW */
-		int retval = du_core->or1k_jtag_read_cpu(&or1k->jtag,
-							 or1k->arch_info[num].spr_num, 1, &reg_value);
+		int retval = du_core->rvl_jtag_read_cpu(&rvl->jtag,
+							 rvl->arch_info[num].spr_num, 1, &reg_value);
 		if (retval != ERROR_OK) {
-			LOG_ERROR("Error while reading spr 0x%08" PRIx32, or1k->arch_info[num].spr_num);
+			LOG_ERROR("Error while reading spr 0x%08" PRIx32, rvl->arch_info[num].spr_num);
 			return retval;
 		}
-		buf_set_u32(or1k->core_cache->reg_list[num].value, 0, 32, reg_value);
+		buf_set_u32(rvl->core_cache->reg_list[num].value, 0, 32, reg_value);
 		LOG_DEBUG("Read spr reg %i value 0x%08" PRIx32, num, reg_value);
 	}
 
 	return ERROR_OK;
 }
 
-static int or1k_write_core_reg(struct target *target, int num)
+static int rvl_write_core_reg(struct target *target, int num)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
+	struct rvl_common *rvl = target_to_rvl(target);
 
 	LOG_DEBUG("-");
 
-	if ((num < 0) || (num >= OR1KNUMCOREREGS))
+	if ((num < 0) || (num >= GBD_REGNO_COUNT))
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	uint32_t reg_value = buf_get_u32(or1k->core_cache->reg_list[num].value, 0, 32);
-	or1k->core_regs[num] = reg_value;
+	uint32_t reg_value = buf_get_u32(rvl->core_cache->reg_list[num].value, 0, 32);
+	rvl->core_regs[num] = reg_value;
 	LOG_DEBUG("Write core reg %i value 0x%08" PRIx32, num, reg_value);
-	or1k->core_cache->reg_list[num].valid = true;
-	or1k->core_cache->reg_list[num].dirty = false;
+	rvl->core_cache->reg_list[num].valid = true;
+	rvl->core_cache->reg_list[num].dirty = false;
 
 	return ERROR_OK;
 }
 
-static int or1k_get_core_reg(struct reg *reg)
+static int rvl_get_core_reg(struct reg *reg)
 {
-	struct or1k_core_reg *or1k_reg = reg->arch_info;
-	struct target *target = or1k_reg->target;
+	struct rvl_core_reg *rvl_reg = reg->arch_info;
+	struct target *target = rvl_reg->target;
 
 	LOG_DEBUG("-");
 
 	if (target->state != TARGET_HALTED)
 		return ERROR_TARGET_NOT_HALTED;
 
-	return or1k_read_core_reg(target, or1k_reg->list_num);
+	return rvl_read_core_reg(target, rvl_reg->list_num);
 }
 
-static int or1k_set_core_reg(struct reg *reg, uint8_t *buf)
+static int rvl_set_core_reg(struct reg *reg, uint8_t *buf)
 {
-	struct or1k_core_reg *or1k_reg = reg->arch_info;
-	struct target *target = or1k_reg->target;
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_core_reg *rvl_reg = reg->arch_info;
+	struct target *target = rvl_reg->target;
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 	uint32_t value = buf_get_u32(buf, 0, 32);
 
 	LOG_DEBUG("-");
@@ -389,14 +407,17 @@ static int or1k_set_core_reg(struct reg *reg, uint8_t *buf)
 	if (target->state != TARGET_HALTED)
 		return ERROR_TARGET_NOT_HALTED;
 
-	if (or1k_reg->list_num < OR1KNUMCOREREGS) {
+	if (or1k_reg->list_num < GBD_REGNO_COUNT) 
+    {
 		buf_set_u32(reg->value, 0, 32, value);
 		reg->dirty = true;
 		reg->valid = true;
-	} else {
+	} 
+    else 
+    {
 		/* This is an spr, write it to the HW */
-		int retval = du_core->or1k_jtag_write_cpu(&or1k->jtag,
-							  or1k_reg->spr_num, 1, &value);
+		int retval = du_core->rvl_jtag_write_cpu(&rvl->jtag,
+							  rvl_reg->spr_num, 1, &value);
 		if (retval != ERROR_OK) {
 			LOG_ERROR("Error while writing spr 0x%08" PRIx32, or1k_reg->spr_num);
 			return retval;
@@ -406,48 +427,48 @@ static int or1k_set_core_reg(struct reg *reg, uint8_t *buf)
 	return ERROR_OK;
 }
 
-static const struct reg_arch_type or1k_reg_type = {
-	.get = or1k_get_core_reg,
-	.set = or1k_set_core_reg,
+static const struct reg_arch_type rvl_reg_type = {
+	.get = rvl_get_core_reg,
+	.set = rvl_set_core_reg,
 };
 
-static struct reg_cache *or1k_build_reg_cache(struct target *target)
+static struct reg_cache *rvl_build_reg_cache(struct target *target)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
+	struct rvl_common *or1k = target_to_rvl(target);
 	struct reg_cache **cache_p = register_get_last_cache_p(&target->reg_cache);
 	struct reg_cache *cache = malloc(sizeof(struct reg_cache));
 	struct reg *reg_list = calloc(or1k->nb_regs, sizeof(struct reg));
-	struct or1k_core_reg *arch_info =
-		malloc((or1k->nb_regs) * sizeof(struct or1k_core_reg));
+	struct rvl_core_reg *arch_info = malloc((or1k->nb_regs) * sizeof(struct rvl_core_reg));
 	struct reg_feature *feature;
 
 	LOG_DEBUG("-");
 
 	/* Build the process context cache */
-	cache->name = "OpenRISC 1000 registers";
+	cache->name = "RoaLogic lattice registers";
 	cache->next = NULL;
 	cache->reg_list = reg_list;
-	cache->num_regs = or1k->nb_regs;
+	cache->num_regs = rvl->nb_regs;
 	(*cache_p) = cache;
-	or1k->core_cache = cache;
-	or1k->arch_info = arch_info;
+	rvl->core_cache = cache;
+	rvl->arch_info = arch_info;
 
-	for (int i = 0; i < or1k->nb_regs; i++) {
-		arch_info[i] = or1k_core_reg_list_arch_info[i];
+	for (int i = 0; i < rvl->nb_regs; i++) 
+    {
+		arch_info[i] = rvl_core_reg_list_arch_info[i];
 		arch_info[i].target = target;
-		arch_info[i].or1k_common = or1k;
-		reg_list[i].name = or1k_core_reg_list_arch_info[i].name;
+		arch_info[i].rvl_common = rvl;
+		reg_list[i].name = rvl_core_reg_list_arch_info[i].name;
 
 		feature = malloc(sizeof(struct reg_feature));
-		feature->name = or1k_core_reg_list_arch_info[i].feature;
+		feature->name = rvl_core_reg_list_arch_info[i].feature;
 		reg_list[i].feature = feature;
 
-		reg_list[i].group = or1k_core_reg_list_arch_info[i].group;
+		reg_list[i].group = rvl_core_reg_list_arch_info[i].group;
 		reg_list[i].size = 32;
 		reg_list[i].value = calloc(1, 4);
 		reg_list[i].dirty = false;
 		reg_list[i].valid = false;
-		reg_list[i].type = &or1k_reg_type;
+		reg_list[i].type = &rvl_reg_type;
 		reg_list[i].arch_info = &arch_info[i];
 		reg_list[i].number = i;
 		reg_list[i].exist = true;
@@ -456,22 +477,22 @@ static struct reg_cache *or1k_build_reg_cache(struct target *target)
 	return cache;
 }
 
-static int or1k_debug_entry(struct target *target)
+static int rvl_debug_entry(struct target *target)
 {
 	LOG_DEBUG("-");
 
-	int retval = or1k_save_context(target);
+	int retval = rvl_save_context(target);
 	if (retval != ERROR_OK) {
-		LOG_ERROR("Error while calling or1k_save_context");
+		LOG_ERROR("Error while calling rvl_save_context");
 		return retval;
 	}
 
-	struct or1k_common *or1k = target_to_or1k(target);
-	uint32_t addr = or1k->core_regs[OR1K_REG_NPC];
+	struct rvl_common *rvl = target_to_rvl(target);
+	uint32_t addr = rvl->core_regs[OR1K_REG_NPC];
 
 	if (breakpoint_find(target, addr))
 		/* Halted on a breakpoint, step back to permit executing the instruction there */
-		retval = or1k_set_core_reg(&or1k->core_cache->reg_list[OR1K_REG_NPC],
+		retval = rvl_set_core_reg(&rvl->core_cache->reg_list[OR1K_REG_NPC],
 					   (uint8_t *)&addr);
 
 	return retval;
@@ -479,11 +500,10 @@ static int or1k_debug_entry(struct target *target)
 
 static int or1k_halt(struct target *target)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 
-	LOG_DEBUG("target->state: %s",
-		  target_state_name(target));
+	LOG_DEBUG("target->state: %s", target_state_name(target));
 
 	if (target->state == TARGET_HALTED) {
 		LOG_DEBUG("Target was already halted");
@@ -494,18 +514,21 @@ static int or1k_halt(struct target *target)
 		LOG_WARNING("Target was in unknown state when halt was requested");
 
 	if (target->state == TARGET_RESET) {
-		if ((jtag_get_reset_config() & RESET_SRST_PULLS_TRST) &&
-		    jtag_get_srst()) {
+		if ((jtag_get_reset_config() & RESET_SRST_PULLS_TRST) && jtag_get_srst()) 
+        {
 			LOG_ERROR("Can't request a halt while in reset if nSRST pulls nTRST");
 			return ERROR_TARGET_FAILURE;
-		} else {
+		} 
+        else 
+        {
 			target->debug_reason = DBG_REASON_DBGRQ;
 			return ERROR_OK;
 		}
 	}
 
-	int retval = du_core->or1k_cpu_stall(&or1k->jtag, CPU_STALL);
-	if (retval != ERROR_OK) {
+	int retval = du_core->rvl_cpu_stall(&rvl->jtag, CPU_STALL);
+	if (retval != ERROR_OK) 
+    {
 		LOG_ERROR("Impossible to stall the CPU");
 		return retval;
 	}
@@ -515,10 +538,10 @@ static int or1k_halt(struct target *target)
 	return ERROR_OK;
 }
 
-static int or1k_is_cpu_running(struct target *target, int *running)
+static int rvl_is_cpu_running(struct target *target, int *running)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 	int retval;
 	int tries = 0;
 	const int RETRIES_MAX = 5;
@@ -531,13 +554,13 @@ static int or1k_is_cpu_running(struct target *target, int *running)
 
 		tries++;
 
-		retval = du_core->or1k_is_cpu_running(&or1k->jtag, running);
+		retval = du_core->rvl_is_cpu_running(&rvl->jtag, running);
 		if (retval != ERROR_OK) {
 			LOG_WARNING("Debug IF CPU control reg read failure.");
 			/* Try once to restart the JTAG infrastructure -
 			   quite possibly the board has just been reset. */
 			LOG_WARNING("Resetting JTAG TAP state and reconnecting to debug IF.");
-			du_core->or1k_jtag_init(&or1k->jtag);
+			du_core->rvl_jtag_init(&rvl->jtag);
 
 			LOG_WARNING("...attempt %d of %d", tries, RETRIES_MAX);
 
@@ -552,66 +575,73 @@ static int or1k_is_cpu_running(struct target *target, int *running)
 	return retval;
 }
 
-static int or1k_poll(struct target *target)
+static int rvl_poll(struct target *target)
 {
 	int retval;
 	int running;
 
-	retval = or1k_is_cpu_running(target, &running);
+	retval = rvl_is_cpu_running(target, &running);
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while calling or1k_is_cpu_running");
 		return retval;
 	}
 
 	/* check for processor halted */
-	if (!running) {
+	if (!running) 
+    {
 		/* It's actually stalled, so update our software's state */
 		if ((target->state == TARGET_RUNNING) ||
-		    (target->state == TARGET_RESET)) {
+		    (target->state == TARGET_RESET)) 
+        {
 
 			target->state = TARGET_HALTED;
 
-			retval = or1k_debug_entry(target);
-			if (retval != ERROR_OK) {
+			retval = rvl_debug_entry(target);
+			if (retval != ERROR_OK) 
+            {
 				LOG_ERROR("Error while calling or1k_debug_entry");
 				return retval;
 			}
 
-			target_call_event_callbacks(target,
-						    TARGET_EVENT_HALTED);
-		} else if (target->state == TARGET_DEBUG_RUNNING) {
+			target_call_event_callbacks(target, TARGET_EVENT_HALTED);
+		} 
+        else if (target->state == TARGET_DEBUG_RUNNING) 
+        {
 			target->state = TARGET_HALTED;
 
-			retval = or1k_debug_entry(target);
-			if (retval != ERROR_OK) {
+			retval = rvl_debug_entry(target);
+			if (retval != ERROR_OK) 
+            {
 				LOG_ERROR("Error while calling or1k_debug_entry");
 				return retval;
 			}
 
-			target_call_event_callbacks(target,
-						    TARGET_EVENT_DEBUG_HALTED);
+			target_call_event_callbacks(target, TARGET_EVENT_DEBUG_HALTED);
 		}
-	} else { /* ... target is running */
+	} 
+    else 
+    { /* ... target is running */
 
 		/* If target was supposed to be stalled, stall it again */
-		if  (target->state == TARGET_HALTED) {
-
+		if  (target->state == TARGET_HALTED) 
+        {
 			target->state = TARGET_RUNNING;
 
-			retval = or1k_halt(target);
-			if (retval != ERROR_OK) {
+			retval = rvl_halt(target);
+			if (retval != ERROR_OK) 
+            {
 				LOG_ERROR("Error while calling or1k_halt");
 				return retval;
 			}
 
-			retval = or1k_debug_entry(target);
-			if (retval != ERROR_OK) {
+			retval = rvl_debug_entry(target);
+			if (retval != ERROR_OK) 
+            {
 				LOG_ERROR("Error while calling or1k_debug_entry");
 				return retval;
 			}
 
-			target_call_event_callbacks(target,
-						    TARGET_EVENT_DEBUG_HALTED);
+			target_call_event_callbacks(target, TARGET_EVENT_DEBUG_HALTED);
 		}
 
 		target->state = TARGET_RUNNING;
@@ -621,14 +651,15 @@ static int or1k_poll(struct target *target)
 	return ERROR_OK;
 }
 
-static int or1k_assert_reset(struct target *target)
+static int rvl_assert_reset(struct target *target)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 
 	LOG_DEBUG("-");
 
-	int retval = du_core->or1k_cpu_reset(&or1k->jtag, CPU_RESET);
+	int retval = du_core->rvl_cpu_reset(&rvl->jtag, CPU_RESET);
+
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while asserting RESET");
 		return retval;
@@ -637,15 +668,16 @@ static int or1k_assert_reset(struct target *target)
 	return ERROR_OK;
 }
 
-static int or1k_deassert_reset(struct target *target)
+static int rvl_deassert_reset(struct target *target)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 
 	LOG_DEBUG("-");
 
-	int retval = du_core->or1k_cpu_reset(&or1k->jtag, CPU_NOT_RESET);
-	if (retval != ERROR_OK) {
+	int retval = du_core->rvl_cpu_reset(&rvl->jtag, CPU_NOT_RESET);
+	if (retval != ERROR_OK) 
+    {
 		LOG_ERROR("Error while deasserting RESET");
 		return retval;
 	}
@@ -653,24 +685,25 @@ static int or1k_deassert_reset(struct target *target)
 	return ERROR_OK;
 }
 
-static int or1k_soft_reset_halt(struct target *target)
+static int rvl_soft_reset_halt(struct target *target)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 
 	LOG_DEBUG("-");
 
-	int retval = du_core->or1k_cpu_stall(&or1k->jtag, CPU_STALL);
+	int retval = du_core->rvl_cpu_stall(&rvl->jtag, CPU_STALL);
+
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while stalling the CPU");
 		return retval;
 	}
 
-	retval = or1k_assert_reset(target);
+	retval = rvl_assert_reset(target);
 	if (retval != ERROR_OK)
 		return retval;
 
-	retval = or1k_deassert_reset(target);
+	retval = rvl_deassert_reset(target);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -690,15 +723,15 @@ static bool is_any_soft_breakpoint(struct target *target)
 	return false;
 }
 
-static int or1k_resume_or_step(struct target *target, int current,
+static int rvl_resume_or_step(struct target *target, int current,
 			       uint32_t address, int handle_breakpoints,
 			       int debug_execution, int step)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 	struct breakpoint *breakpoint = NULL;
 	uint32_t resume_pc;
-	uint32_t debug_reg_list[OR1K_DEBUG_REG_NUM];
+	uint32_t debug_reg_list[RVL_DEBUG_REG_NUM];
 
 	LOG_DEBUG("Addr: 0x%" PRIx32 ", stepping: %s, handle breakpoints %s\n",
 		  address, step ? "yes" : "no", handle_breakpoints ? "yes" : "no");
@@ -713,34 +746,33 @@ static int or1k_resume_or_step(struct target *target, int current,
 
 	/* current ? continue on current pc : continue at <address> */
 	if (!current)
-		buf_set_u32(or1k->core_cache->reg_list[OR1K_REG_NPC].value, 0,
-			    32, address);
+		buf_set_u32(rvl->core_cache->reg_list[GDB_REGNO_PC].value, 0, 32, address);
 
-	int retval = or1k_restore_context(target);
+	int retval = rvl_restore_context(target);
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while calling or1k_restore_context");
 		return retval;
 	}
 
 	/* read debug registers (starting from DMR1 register) */
-	retval = du_core->or1k_jtag_read_cpu(&or1k->jtag, OR1K_DMR1_CPU_REG_ADD,
-					     OR1K_DEBUG_REG_NUM, debug_reg_list);
+	retval = du_core->rvl_jtag_read_cpu(&or1k->jtag, RVL_DEBUG_REG_CTRL,
+					     RVL_DEBUG_REG_NUM, debug_reg_list);
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while reading debug registers");
 		return retval;
 	}
 
 	/* Clear Debug Reason Register (DRR) */
-	debug_reg_list[OR1K_DEBUG_REG_DRR] = 0;
+	debug_reg_list[RVL_DEBUG_REG_CAUSE] = 0;
 
 	/* Clear watchpoint break generation in Debug Mode Register 2 (DMR2) */
 	debug_reg_list[OR1K_DEBUG_REG_DMR2] &= ~OR1K_DMR2_WGB;
 	if (step)
 		/* Set the single step trigger in Debug Mode Register 1 (DMR1) */
-		debug_reg_list[OR1K_DEBUG_REG_DMR1] |= OR1K_DMR1_ST | OR1K_DMR1_BT;
+		debug_reg_list[RVL_DEBUG_REG_CTRL] |= OR1K_DMR1_ST | OR1K_DMR1_BT;
 	else
 		/* Clear the single step trigger in Debug Mode Register 1 (DMR1) */
-		debug_reg_list[OR1K_DEBUG_REG_DMR1] &= ~(OR1K_DMR1_ST | OR1K_DMR1_BT);
+		debug_reg_list[RVL_DEBUG_REG_CTRL] &= ~(OR1K_DMR1_ST | OR1K_DMR1_BT);
 
 	/* Set traps to be handled by the debug unit in the Debug Stop
 	   Register (DSR). Check if we have any software breakpoints in
@@ -750,31 +782,34 @@ static int or1k_resume_or_step(struct target *target, int current,
 		debug_reg_list[OR1K_DEBUG_REG_DSR] |= OR1K_DSR_TE;
 
 	/* Write debug registers (starting from DMR1 register) */
-	retval = du_core->or1k_jtag_write_cpu(&or1k->jtag, OR1K_DMR1_CPU_REG_ADD,
-					      OR1K_DEBUG_REG_NUM, debug_reg_list);
-	if (retval != ERROR_OK) {
+	retval = du_core->rvl_jtag_write_cpu(&rvl->jtag, OR1K_DMR1_CPU_REG_ADD, OR1K_DEBUG_REG_NUM, debug_reg_list);
+
+	if (retval != ERROR_OK) 
+    {
 		LOG_ERROR("Error while writing back debug registers");
 		return retval;
 	}
 
-	resume_pc = buf_get_u32(or1k->core_cache->reg_list[OR1K_REG_NPC].value,
-				0, 32);
+	resume_pc = buf_get_u32(rvl->core_cache->reg_list[OR1K_REG_NPC].value, 0, 32);
 
 	/* The front-end may request us not to handle breakpoints */
-	if (handle_breakpoints) {
+	if (handle_breakpoints) 
+    {
 		/* Single step past breakpoint at current address */
 		breakpoint = breakpoint_find(target, resume_pc);
-		if (breakpoint) {
+		if (breakpoint) 
+        {
 			LOG_DEBUG("Unset breakpoint at 0x%08" TARGET_PRIxADDR, breakpoint->address);
-			retval = or1k_remove_breakpoint(target, breakpoint);
+			retval = rvl_remove_breakpoint(target, breakpoint);
 			if (retval != ERROR_OK)
 				return retval;
 		}
 	}
 
 	/* Unstall time */
-	retval = du_core->or1k_cpu_stall(&or1k->jtag, CPU_UNSTALL);
-	if (retval != ERROR_OK) {
+	retval = du_core->rvl_cpu_stall(&rvl->jtag, CPU_UNSTALL);
+	if (retval != ERROR_OK) 
+    {
 		LOG_ERROR("Error while unstalling the CPU");
 		return retval;
 	}
@@ -785,7 +820,7 @@ static int or1k_resume_or_step(struct target *target, int current,
 		target->debug_reason = DBG_REASON_NOTHALTED;
 
 	/* Registers are now invalid */
-	register_cache_invalidate(or1k->core_cache);
+	register_cache_invalidate(rvl->core_cache);
 
 	if (!debug_execution) {
 		target->state = TARGET_RUNNING;
@@ -800,31 +835,31 @@ static int or1k_resume_or_step(struct target *target, int current,
 	return ERROR_OK;
 }
 
-static int or1k_resume(struct target *target, int current,
+static int rvl_resume(struct target *target, int current,
 		       target_addr_t address, int handle_breakpoints,
 		       int debug_execution)
 {
-	return or1k_resume_or_step(target, current, address,
+	return rvl_resume_or_step(target, current, address,
 				   handle_breakpoints,
 				   debug_execution,
 				   NO_SINGLE_STEP);
 }
 
-static int or1k_step(struct target *target, int current,
+static int rvl_step(struct target *target, int current,
 		     target_addr_t address, int handle_breakpoints)
 {
-	return or1k_resume_or_step(target, current, address,
+	return rvl_resume_or_step(target, current, address,
 				   handle_breakpoints,
 				   0,
 				   SINGLE_STEP);
 
 }
 
-static int or1k_add_breakpoint(struct target *target,
+static int rvl_add_breakpoint(struct target *target,
 			       struct breakpoint *breakpoint)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 	uint8_t data;
 
 	LOG_DEBUG("Adding breakpoint: addr 0x%08" TARGET_PRIxADDR ", len %d, type %d, set: %d, id: %" PRIu32,
@@ -836,12 +871,14 @@ static int or1k_add_breakpoint(struct target *target,
 		LOG_ERROR("HW breakpoints not supported for now. Doing SW breakpoint.");
 
 	/* Read and save the instruction */
-	int retval = du_core->or1k_jtag_read_memory(&or1k->jtag,
+	int retval = du_core->rvl_jtag_read_memory(&rvl->jtag,
 					 breakpoint->address,
 					 4,
 					 1,
 					 &data);
-	if (retval != ERROR_OK) {
+
+	if (retval != ERROR_OK) 
+    {
 		LOG_ERROR("Error while reading the instruction at 0x%08" TARGET_PRIxADDR,
 			   breakpoint->address);
 		return retval;
@@ -853,13 +890,14 @@ static int or1k_add_breakpoint(struct target *target,
 	memcpy(breakpoint->orig_instr, &data, breakpoint->length);
 
 	/* Sub in the OR1K trap instruction */
-	uint8_t or1k_trap_insn[4];
-	target_buffer_set_u32(target, or1k_trap_insn, RV_EBREAK_INSTR);
-	retval = du_core->or1k_jtag_write_memory(&or1k->jtag,
+    // Add check for 16 bit instruction, at that point the 16 bit ebreak must be placed
+	uint8_t rvl_trap_insn[4];
+	target_buffer_set_u32(target, rvl_trap_insn, RV_EBREAK_INSTR);
+	retval = du_core->rvl_jtag_write_memory(&or1k->jtag,
 					  breakpoint->address,
 					  4,
 					  1,
-					  or1k_trap_insn);
+					  rvl_trap_insn);
 
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while writing RV_EBREAK_INSTR at 0x%08" TARGET_PRIxADDR,
@@ -867,23 +905,24 @@ static int or1k_add_breakpoint(struct target *target,
 		return retval;
 	}
 
+    // TODO: Add instruction cache invalidation
 	/* invalidate instruction cache */
-	uint32_t addr = breakpoint->address;
-	retval = du_core->or1k_jtag_write_cpu(&or1k->jtag,
-			OR1K_ICBIR_CPU_REG_ADD, 1, &addr);
-	if (retval != ERROR_OK) {
-		LOG_ERROR("Error while invalidating the ICACHE");
-		return retval;
-	}
+	// uint32_t addr = breakpoint->address;
+	// retval = du_core->rvl_jtag_write_cpu(&rvl->jtag,
+	// 		OR1K_ICBIR_CPU_REG_ADD, 1, &addr);
+	// if (retval != ERROR_OK) {
+	// 	LOG_ERROR("Error while invalidating the ICACHE");
+	// 	return retval;
+	// }
 
 	return ERROR_OK;
 }
 
-static int or1k_remove_breakpoint(struct target *target,
+static int rvl_remove_breakpoint(struct target *target,
 				  struct breakpoint *breakpoint)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 
 	LOG_DEBUG("Removing breakpoint: addr 0x%08" TARGET_PRIxADDR ", len %d, type %d, set: %d, id: %" PRIu32,
 		  breakpoint->address, breakpoint->length, breakpoint->type,
@@ -894,7 +933,7 @@ static int or1k_remove_breakpoint(struct target *target,
 		LOG_ERROR("HW breakpoints not supported for now. Doing SW breakpoint.");
 
 	/* Replace the removed instruction */
-	int retval = du_core->or1k_jtag_write_memory(&or1k->jtag,
+	int retval = du_core->rvl_jtag_write_memory(&rvl->jtag,
 					  breakpoint->address,
 					  4,
 					  1,
@@ -906,37 +945,38 @@ static int or1k_remove_breakpoint(struct target *target,
 		return retval;
 	}
 
+    // TODO: Add instruction cache invalidation
 	/* invalidate instruction cache */
-	uint32_t addr = breakpoint->address;
-	retval = du_core->or1k_jtag_write_cpu(&or1k->jtag,
-			OR1K_ICBIR_CPU_REG_ADD, 1, &addr);
-	if (retval != ERROR_OK) {
-		LOG_ERROR("Error while invalidating the ICACHE");
-		return retval;
-	}
+	// uint32_t addr = breakpoint->address;
+	// retval = du_core->rvl_jtag_write_cpu(&rvl->jtag,
+	// 		OR1K_ICBIR_CPU_REG_ADD, 1, &addr);
+	// if (retval != ERROR_OK) {
+	// 	LOG_ERROR("Error while invalidating the ICACHE");
+	// 	return retval;
+	// }
 
 	return ERROR_OK;
 }
 
-static int or1k_add_watchpoint(struct target *target,
+static int rvl_add_watchpoint(struct target *target,
 			       struct watchpoint *watchpoint)
 {
 	LOG_ERROR("%s: implement me", __func__);
 	return ERROR_OK;
 }
 
-static int or1k_remove_watchpoint(struct target *target,
+static int rvl_remove_watchpoint(struct target *target,
 				  struct watchpoint *watchpoint)
 {
 	LOG_ERROR("%s: implement me", __func__);
 	return ERROR_OK;
 }
 
-static int or1k_read_memory(struct target *target, target_addr_t address,
+static int rvl_read_memory(struct target *target, target_addr_t address,
 		uint32_t size, uint32_t count, uint8_t *buffer)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 
 	LOG_DEBUG("Read memory at 0x%08" TARGET_PRIxADDR ", size: %" PRIu32 ", count: 0x%08" PRIx32, address, size, count);
 
@@ -956,14 +996,14 @@ static int or1k_read_memory(struct target *target, target_addr_t address,
 		return ERROR_TARGET_UNALIGNED_ACCESS;
 	}
 
-	return du_core->or1k_jtag_read_memory(&or1k->jtag, address, size, count, buffer);
+	return du_core->rvl_jtag_read_memory(&rvl->jtag, address, size, count, buffer);
 }
 
-static int or1k_write_memory(struct target *target, target_addr_t address,
+static int rvl_write_memory(struct target *target, target_addr_t address,
 		uint32_t size, uint32_t count, const uint8_t *buffer)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 
 	LOG_DEBUG("Write memory at 0x%08" TARGET_PRIxADDR ", size: %" PRIu32 ", count: 0x%08" PRIx32, address, size, count);
 
@@ -983,15 +1023,15 @@ static int or1k_write_memory(struct target *target, target_addr_t address,
 		return ERROR_TARGET_UNALIGNED_ACCESS;
 	}
 
-	return du_core->or1k_jtag_write_memory(&or1k->jtag, address, size, count, buffer);
+	return du_core->rvl_jtag_write_memory(&rvl->jtag, address, size, count, buffer);
 }
 
-static int or1k_init_target(struct command_context *cmd_ctx,
+static int rvl_init_target(struct command_context *cmd_ctx,
 		struct target *target)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
-	struct or1k_jtag *jtag = &or1k->jtag;
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rvl_jtag *jtag = &rvl->jtag;
 
 	if (!du_core) {
 		LOG_ERROR("No debug unit selected");
@@ -1003,40 +1043,38 @@ static int or1k_init_target(struct command_context *cmd_ctx,
 		return ERROR_FAIL;
 	}
 
-	or1k->jtag.tap = target->tap;
-	or1k->jtag.or1k_jtag_inited = 0;
-	or1k->jtag.or1k_jtag_module_selected = -1;
-	or1k->jtag.target = target;
+	rvl->jtag.tap = target->tap;
+	rvl->jtag.rvl_jtag_inited = 0;
+	rvl->jtag.rvl_jtag_module_selected = -1;
+	rvl->jtag.target = target;
 
-	or1k_build_reg_cache(target);
+	rvl_build_reg_cache(target);
 
 	return ERROR_OK;
 }
 
-static int or1k_target_create(struct target *target, Jim_Interp *interp)
+static int rvl_target_create(struct target *target, Jim_Interp *interp)
 {
 	if (!target->tap)
 		return ERROR_FAIL;
 
-	struct or1k_common *or1k = calloc(1, sizeof(struct or1k_common));
+	struct rvl_common *rvl = calloc(1, sizeof(struct rvl_common));
 
-	target->arch_info = or1k;
+	target->arch_info = rvl;
 
-	or1k_create_reg_list(target);
+	rvl_create_reg_list(target);
 
-	or1k_tap_vjtag_register();
-	or1k_tap_xilinx_bscan_register();
-	or1k_tap_mohor_register();
+	rl_universal_tap_register();
 
-	or1k_du_adv_register();
+	rvl_du_adv_register();
 
 	return ERROR_OK;
 }
 
-static int or1k_examine(struct target *target)
+static int rvl_examine(struct target *target)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 
 	if (!target_was_examined(target)) {
 
@@ -1044,7 +1082,7 @@ static int or1k_examine(struct target *target)
 
 		int running;
 
-		int retval = du_core->or1k_is_cpu_running(&or1k->jtag, &running);
+		int retval = du_core->rvl_is_cpu_running(&rvl->jtag, &running);
 		if (retval != ERROR_OK) {
 			LOG_ERROR("Couldn't read the CPU state");
 			return retval;
@@ -1069,19 +1107,19 @@ static int or1k_examine(struct target *target)
 	return ERROR_OK;
 }
 
-static int or1k_arch_state(struct target *target)
+static int rvl_arch_state(struct target *target)
 {
 	return ERROR_OK;
 }
 
-static int or1k_get_gdb_reg_list(struct target *target, struct reg **reg_list[],
+static int rvl_get_gdb_reg_list(struct target *target, struct reg **reg_list[],
 			  int *reg_list_size, enum target_register_class reg_class)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
+	struct rvl_common *rvl = target_to_rvl(target);
 
 	if (reg_class == REG_CLASS_GENERAL) {
 		/* We will have this called whenever GDB connects. */
-		int retval = or1k_save_context(target);
+		int retval = rvl_save_context(target);
 		if (retval != ERROR_OK) {
 			LOG_ERROR("Error while calling or1k_save_context");
 			return retval;
@@ -1091,36 +1129,36 @@ static int or1k_get_gdb_reg_list(struct target *target, struct reg **reg_list[],
 		*reg_list = malloc((*reg_list_size) * sizeof(struct reg *));
 
 		for (int i = 0; i < OR1KNUMCOREREGS; i++)
-			(*reg_list)[i] = &or1k->core_cache->reg_list[i];
+			(*reg_list)[i] = &rvl->core_cache->reg_list[i];
 	} else {
-		*reg_list_size = or1k->nb_regs;
+		*reg_list_size = rvl->nb_regs;
 		*reg_list = malloc((*reg_list_size) * sizeof(struct reg *));
 
-		for (int i = 0; i < or1k->nb_regs; i++)
-			(*reg_list)[i] = &or1k->core_cache->reg_list[i];
+		for (int i = 0; i < rvl->nb_regs; i++)
+			(*reg_list)[i] = &rvl->core_cache->reg_list[i];
 	}
 
 	return ERROR_OK;
 
 }
 
-static int or1k_get_gdb_fileio_info(struct target *target, struct gdb_fileio_info *fileio_info)
+static int rvl_get_gdb_fileio_info(struct target *target, struct gdb_fileio_info *fileio_info)
 {
 	return ERROR_FAIL;
 }
 
-static int or1k_checksum_memory(struct target *target, target_addr_t address,
+static int rvl_checksum_memory(struct target *target, target_addr_t address,
 		uint32_t count, uint32_t *checksum)
 {
 	return ERROR_FAIL;
 }
 
-static int or1k_profiling(struct target *target, uint32_t *samples,
+static int rvl_profiling(struct target *target, uint32_t *samples,
 		uint32_t max_num_samples, uint32_t *num_samples, uint32_t seconds)
 {
 	struct timeval timeout, now;
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 	int retval = ERROR_OK;
 
 	gettimeofday(&timeout, NULL);
@@ -1142,7 +1180,7 @@ static int or1k_profiling(struct target *target, uint32_t *samples,
 
 	for (;;) {
 		uint32_t reg_value;
-		retval = du_core->or1k_jtag_read_cpu(&or1k->jtag, GROUP0 + 16 /* NPC */, 1, &reg_value);
+		retval = du_core->rvl_jtag_read_cpu(&rvl->jtag, (GROUP_GPRS + 0x201) /* NPC */, 1, &reg_value);
 		if (retval != ERROR_OK) {
 			LOG_ERROR("Error while reading NPC");
 			return retval;
@@ -1161,21 +1199,21 @@ static int or1k_profiling(struct target *target, uint32_t *samples,
 	return retval;
 }
 
-COMMAND_HANDLER(or1k_tap_select_command_handler)
+COMMAND_HANDLER(rvl_tap_select_command_handler)
 {
-	struct target *target = get_current_target(CMD_CTX);
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_jtag *jtag = &or1k->jtag;
-	struct or1k_tap_ip *or1k_tap;
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rvl_jtag *jtag = &rvl->jtag;
+	struct rvl_tap_ip *or1k_tap;
 
 	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	list_for_each_entry(or1k_tap, &tap_list, list) {
-		if (or1k_tap->name) {
-			if (!strcmp(CMD_ARGV[0], or1k_tap->name)) {
-				jtag->tap_ip = or1k_tap;
-				LOG_INFO("%s tap selected", or1k_tap->name);
+	list_for_each_entry(rvl_tap, &tap_list, list) {
+		if (rvl_tap->name) {
+			if (!strcmp(CMD_ARGV[0], rvl_tap->name)) {
+				jtag->tap_ip = rv;_tap;
+				LOG_INFO("%s tap selected", rvl_tap->name);
 				return ERROR_OK;
 			}
 		}
@@ -1185,16 +1223,16 @@ COMMAND_HANDLER(or1k_tap_select_command_handler)
 	return ERROR_COMMAND_SYNTAX_ERROR;
 }
 
-COMMAND_HANDLER(or1k_tap_list_command_handler)
+COMMAND_HANDLER(rvl_tap_list_command_handler)
 {
-	struct or1k_tap_ip *or1k_tap;
+	struct rvl_tap_ip *or1k_tap;
 
 	if (CMD_ARGC != 0)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	list_for_each_entry(or1k_tap, &tap_list, list) {
-		if (or1k_tap->name)
-			command_print(CMD, "%s", or1k_tap->name);
+	list_for_each_entry(rvl_tap, &tap_list, list) {
+		if (rvl_tap->name)
+			command_print(CMD, "%s", rvl_tap->name);
 	}
 
 	return ERROR_OK;
@@ -1202,26 +1240,26 @@ COMMAND_HANDLER(or1k_tap_list_command_handler)
 
 COMMAND_HANDLER(or1k_du_select_command_handler)
 {
-	struct target *target = get_current_target(CMD_CTX);
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_jtag *jtag = &or1k->jtag;
-	struct or1k_du *or1k_du;
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rvl_jtag *jtag = &rvl->jtag;
+	struct rvl_du *rvl_du;
 
 	if (CMD_ARGC > 2)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	list_for_each_entry(or1k_du, &du_list, list) {
-		if (or1k_du->name) {
-			if (!strcmp(CMD_ARGV[0], or1k_du->name)) {
-				jtag->du_core = or1k_du;
-				LOG_INFO("%s debug unit selected", or1k_du->name);
+	list_for_each_entry(rvl_du, &du_list, list) {
+		if (rvl_du->name) {
+			if (!strcmp(CMD_ARGV[0], rvl_du->name)) {
+				jtag->du_core = rvl_du;
+				LOG_INFO("%s debug unit selected", rvl_du->name);
 
 				if (CMD_ARGC == 2) {
 					int options;
 					COMMAND_PARSE_NUMBER(int, CMD_ARGV[1], options);
-					or1k_du->options = options;
+					rvl_du->options = options;
 					LOG_INFO("Option %x is passed to %s debug unit"
-						 , options, or1k_du->name);
+						 , options, rvl_du->name);
 				}
 
 				return ERROR_OK;
@@ -1233,31 +1271,31 @@ COMMAND_HANDLER(or1k_du_select_command_handler)
 	return ERROR_COMMAND_SYNTAX_ERROR;
 }
 
-COMMAND_HANDLER(or1k_du_list_command_handler)
+COMMAND_HANDLER(rvl_du_list_command_handler)
 {
-	struct or1k_du *or1k_du;
+	struct rvl_du *rvl_du;
 
 	if (CMD_ARGC != 0)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	list_for_each_entry(or1k_du, &du_list, list) {
-		if (or1k_du->name)
-			command_print(CMD, "%s", or1k_du->name);
+	list_for_each_entry(rvl_du, &du_list, list) {
+		if (rvl_du->name)
+			command_print(CMD, "%s", rvl_du->name);
 	}
 
 	return ERROR_OK;
 }
 
-COMMAND_HANDLER(or1k_addreg_command_handler)
+COMMAND_HANDLER(rvl_addreg_command_handler)
 {
 	struct target *target = get_current_target(CMD_CTX);
-	struct or1k_core_reg new_reg;
+	struct rvl_core_reg new_reg;
 
 	if (CMD_ARGC != 4)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
 	new_reg.target = NULL;
-	new_reg.or1k_common = NULL;
+	new_reg.rvl_common = NULL;
 
 	uint32_t addr;
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], addr);
@@ -1267,7 +1305,7 @@ COMMAND_HANDLER(or1k_addreg_command_handler)
 	new_reg.feature = strdup(CMD_ARGV[2]);
 	new_reg.group = strdup(CMD_ARGV[3]);
 
-	or1k_add_reg(target, &new_reg);
+	rvl_add_reg(target, &new_reg);
 
 	LOG_DEBUG("Add reg \"%s\" @ 0x%08" PRIx32 ", group \"%s\", feature \"%s\"",
 		  new_reg.name, addr, new_reg.group, new_reg.feature);
@@ -1278,28 +1316,28 @@ COMMAND_HANDLER(or1k_addreg_command_handler)
 static const struct command_registration or1k_hw_ip_command_handlers[] = {
 	{
 		.name = "tap_select",
-		.handler = or1k_tap_select_command_handler,
+		.handler = rvl_tap_select_command_handler,
 		.mode = COMMAND_ANY,
 		.usage = "name",
 		.help = "Select the TAP core to use",
 	},
 	{
 		.name = "tap_list",
-		.handler = or1k_tap_list_command_handler,
+		.handler = rvl_tap_list_command_handler,
 		.mode = COMMAND_ANY,
 		.usage = "",
 		.help = "Display available TAP core",
 	},
 	{
 		.name = "du_select",
-		.handler = or1k_du_select_command_handler,
+		.handler = rvl_du_select_command_handler,
 		.mode = COMMAND_ANY,
 		.usage = "name",
 		.help = "Select the Debug Unit core to use",
 	},
 	{
 		.name = "du_list",
-		.handler = or1k_du_list_command_handler,
+		.handler = rvl_du_list_command_handler,
 		.mode = COMMAND_ANY,
 		.usage = "select_tap name",
 		.help = "Display available Debug Unit core",
@@ -1307,10 +1345,10 @@ static const struct command_registration or1k_hw_ip_command_handlers[] = {
 	COMMAND_REGISTRATION_DONE
 };
 
-static const struct command_registration or1k_reg_command_handlers[] = {
+static const struct command_registration rvl_reg_command_handlers[] = {
 	{
 		.name = "addreg",
-		.handler = or1k_addreg_command_handler,
+		.handler = rvl_addreg_command_handler,
 		.mode = COMMAND_ANY,
 		.usage = "name addr feature group",
 		.help = "Add a register to the register list",
@@ -1318,50 +1356,50 @@ static const struct command_registration or1k_reg_command_handlers[] = {
 	COMMAND_REGISTRATION_DONE
 };
 
-static const struct command_registration or1k_command_handlers[] = {
+static const struct command_registration rvl_command_handlers[] = {
 	{
-		.chain = or1k_reg_command_handlers,
+		.chain = rvl_reg_command_handlers,
 	},
 	{
-		.chain = or1k_hw_ip_command_handlers,
+		.chain = rvl_hw_ip_command_handlers,
 	},
 	COMMAND_REGISTRATION_DONE
 };
 
 
-struct target_type or1k_target = {
+struct target_type rvl_target = {
 	.name = "or1k",
 
-	.poll = or1k_poll,
-	.arch_state = or1k_arch_state,
+	.poll = rvl_poll,
+	.arch_state = rvl_arch_state,
 
 	.target_request_data = NULL,
 
-	.halt = or1k_halt,
-	.resume = or1k_resume,
-	.step = or1k_step,
+	.halt = rvl_halt,
+	.resume = rvl_resume,
+	.step = rvl_step,
 
-	.assert_reset = or1k_assert_reset,
-	.deassert_reset = or1k_deassert_reset,
-	.soft_reset_halt = or1k_soft_reset_halt,
+	.assert_reset = rvl_assert_reset,
+	.deassert_reset = rvl_deassert_reset,
+	.soft_reset_halt = rvl_soft_reset_halt,
 
-	.get_gdb_reg_list = or1k_get_gdb_reg_list,
+	.get_gdb_reg_list = rvl_get_gdb_reg_list,
 
-	.read_memory = or1k_read_memory,
-	.write_memory = or1k_write_memory,
-	.checksum_memory = or1k_checksum_memory,
+	.read_memory = rvl_read_memory,
+	.write_memory = rvl_write_memory,
+	.checksum_memory = rvl_checksum_memory,
 
-	.commands = or1k_command_handlers,
-	.add_breakpoint = or1k_add_breakpoint,
-	.remove_breakpoint = or1k_remove_breakpoint,
-	.add_watchpoint = or1k_add_watchpoint,
-	.remove_watchpoint = or1k_remove_watchpoint,
+	.commands = rvl_command_handlers,
+	.add_breakpoint = rvl_add_breakpoint,
+	.remove_breakpoint = rvl_remove_breakpoint,
+	.add_watchpoint = rvl_add_watchpoint,
+	.remove_watchpoint = rvl_remove_watchpoint,
 
-	.target_create = or1k_target_create,
-	.init_target = or1k_init_target,
-	.examine = or1k_examine,
+	.target_create = rvl_target_create,
+	.init_target = rvl_init_target,
+	.examine = rvl_examine,
 
-	.get_gdb_fileio_info = or1k_get_gdb_fileio_info,
+	.get_gdb_fileio_info = rvl_get_gdb_fileio_info,
 
-	.profiling = or1k_profiling,
+	.profiling = rvl_profiling,
 };
