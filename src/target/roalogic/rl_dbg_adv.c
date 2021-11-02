@@ -30,7 +30,7 @@
 
 #include "rl_tap.h"
 #include "rvl.h"
-#include "rvl_du.h"
+#include "rl_dbg_adv.h"
 #include "jsp_server.h"
 
 #include <target/target.h>
@@ -131,7 +131,7 @@
 #define STATUS_BYTES			1
 #define CRC_LEN				4
 
-static struct rvl_du rl_dbg_adv;
+static struct rl_du rl_dbg_adv;
 
 static const char * const chain_name[] = {"SYSBUS", "CPU", "JSP"};
 
