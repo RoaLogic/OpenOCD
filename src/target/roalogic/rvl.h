@@ -172,7 +172,7 @@ struct rvl_jtag {
 struct rvl_common {
 	struct rvl_jtag jtag;
 	struct reg_cache *core_cache;
-	uint32_t core_regs[RVLNUMCOREREGS];
+	uint32_t core_regs[GBD_REGNO_COUNT];
 	int nb_regs;
 	struct rvl_core_reg *arch_info;
 };

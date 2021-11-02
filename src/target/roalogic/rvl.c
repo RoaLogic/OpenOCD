@@ -48,178 +48,210 @@ static struct rvl_core_reg *rvl_core_reg_list_arch_info;
 
 /* Combination of RISC-V and RVL names
  * until RVL uses RISC-V debug spec */
-static const struct rvl_core_reg_init rcl_init_reg_list[] = {
+static const struct rvl_core_reg_init rvl_init_reg_list[] = {
 	/* Integer Register File */
-	{"zero",        GROUP_RF   +  0, "org.gnu.gdb.riscv.cpu", NULL},
-	{"ra",          GROUP_RF   +  1, "org.gnu.gdb.riscv.cpu", NULL},
-	{"sp",          GROUP_RF   +  2, "org.gnu.gdb.riscv.cpu", NULL},
-	{"gp",          GROUP_RF   +  3, "org.gnu.gdb.riscv.cpu", NULL},
-	{"tp",          GROUP_RF   +  4, "org.gnu.gdb.riscv.cpu", NULL},
-	{"t0",          GROUP_RF   +  5, "org.gnu.gdb.riscv.cpu", NULL},
-	{"t1",          GROUP_RF   +  6, "org.gnu.gdb.riscv.cpu", NULL},
-	{"t2",          GROUP_RF   +  7, "org.gnu.gdb.riscv.cpu", NULL},
-	{"s0",          GROUP_RF   +  8, "org.gnu.gdb.riscv.cpu", NULL},
-	{"s1",          GROUP_RF   +  9, "org.gnu.gdb.riscv.cpu", NULL},
-	{"a0",          GROUP_RF   + 10, "org.gnu.gdb.riscv.cpu", NULL},
-	{"a1",          GROUP_RF   + 11, "org.gnu.gdb.riscv.cpu", NULL},
-	{"a2",          GROUP_RF   + 12, "org.gnu.gdb.riscv.cpu", NULL},
-	{"a3",          GROUP_RF   + 13, "org.gnu.gdb.riscv.cpu", NULL},
-	{"a4",          GROUP_RF   + 14, "org.gnu.gdb.riscv.cpu", NULL},
-	{"a5",          GROUP_RF   + 15, "org.gnu.gdb.riscv.cpu", NULL},
-	{"a6",          GROUP_RF   + 16, "org.gnu.gdb.riscv.cpu", NULL},
-	{"a7",          GROUP_RF   + 17, "org.gnu.gdb.riscv.cpu", NULL},
-	{"s2",          GROUP_RF   + 18, "org.gnu.gdb.riscv.cpu", NULL},
-	{"s3",          GROUP_RF   + 19, "org.gnu.gdb.riscv.cpu", NULL},
-	{"s4",          GROUP_RF   + 20, "org.gnu.gdb.riscv.cpu", NULL},
-	{"s5",          GROUP_RF   + 21, "org.gnu.gdb.riscv.cpu", NULL},
-	{"s6",          GROUP_RF   + 22, "org.gnu.gdb.riscv.cpu", NULL},
-	{"s7",          GROUP_RF   + 23, "org.gnu.gdb.riscv.cpu", NULL},
-	{"s8",          GROUP_RF   + 24, "org.gnu.gdb.riscv.cpu", NULL},
-	{"s9",          GROUP_RF   + 25, "org.gnu.gdb.riscv.cpu", NULL},
-	{"s10",         GROUP_RF   + 26, "org.gnu.gdb.riscv.cpu", NULL},
-	{"s11",         GROUP_RF   + 27, "org.gnu.gdb.riscv.cpu", NULL},
-	{"t3",          GROUP_RF   + 28, "org.gnu.gdb.riscv.cpu", NULL},
-	{"t4",          GROUP_RF   + 29, "org.gnu.gdb.riscv.cpu", NULL},
-	{"t5",          GROUP_RF   + 30, "org.gnu.gdb.riscv.cpu", NULL},
-	{"t6",          GROUP_RF   + 31, "org.gnu.gdb.riscv.cpu", NULL},
+	{"zero",          GROUP_RF   +  0,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"ra",            GROUP_RF   +  1,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"sp",            GROUP_RF   +  2,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"gp",            GROUP_RF   +  3,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"tp",            GROUP_RF   +  4,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"t0",            GROUP_RF   +  5,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"t1",            GROUP_RF   +  6,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"t2",            GROUP_RF   +  7,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"s0",            GROUP_RF   +  8,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"s1",            GROUP_RF   +  9,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"a0",            GROUP_RF   + 10,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"a1",            GROUP_RF   + 11,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"a2",            GROUP_RF   + 12,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"a3",            GROUP_RF   + 13,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"a4",            GROUP_RF   + 14,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"a5",            GROUP_RF   + 15,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"a6",            GROUP_RF   + 16,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"a7",            GROUP_RF   + 17,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"s2",            GROUP_RF   + 18,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"s3",            GROUP_RF   + 19,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"s4",            GROUP_RF   + 20,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"s5",            GROUP_RF   + 21,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"s6",            GROUP_RF   + 22,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"s7",            GROUP_RF   + 23,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"s8",            GROUP_RF   + 24,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"s9",            GROUP_RF   + 25,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"s10",           GROUP_RF   + 26,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"s11",           GROUP_RF   + 27,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"t3",            GROUP_RF   + 28,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"t4",            GROUP_RF   + 29,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"t5",            GROUP_RF   + 30,             "org.gnu.gdb.riscv.cpu", NULL},
+	{"t6",            GROUP_RF   + 31,             "org.gnu.gdb.riscv.cpu", NULL},
 
 	/* Floating Point Register File */
 	
 	/* CSRs */
-        {"ustatus",     GROUP_CSR  + 0x000, "org.gnu.gdb.riscv.csr", NULL},
+        {"ustatus",       GROUP_CSR  + CSR_USTATUS,    "org.gnu.gdb.riscv.csr", NULL},
+        {"uie",           GROUP_CSR  + CSR_UIE,        "org.gnu.gdb.riscv.csr", NULL},
+        {"utvec",         GROUP_CSR  + CSR_UTVEC,      "org.gnu.gdb.riscv.csr", NULL},
+        {"uscratch",      GROUP_CSR  + CSR_USCRATCH,   "org.gnu.gdb.riscv.csr", NULL},
+        {"uepc",          GROUP_CSR  + CSR_UEPC,       "org.gnu.gdb.riscv.csr", NULL},
+        {"ucause",        GROUP_CSR  + CSR_UCAUSE,     "org.gnu.gdb.riscv.csr", NULL},
+        {"utval",         GROUP_CSR  + CSR_UTVAL,      "org.gnu.gdb.riscv.csr", NULL},
+        {"uip",           GROUP_CSR  + CSR_UIP,        "org.gnu.gdb.riscv.csr", NULL},
+        {"fflags",        GROUP_CSR  + CSR_FFLAGS,     "org.gnu.gdb.riscv.csr", NULL},
+        {"frm",           GROUP_CSR  + CSR_FRM,        "org.gnu.gdb.riscv.csr", NULL},
+        {"fcsr",          GROUP_CSR  + CSR_FCSR,       "org.gnu.gdb.riscv.csr", NULL},
+        {"cycle",         GROUP_CSR  + CSR_CYCLE,      "org.gnu.gdb.riscv.csr", NULL},
+        {"time",          GROUP_CSR  + CSR_TIME,       "org.gnu.gdb.riscv.csr", NULL},
+        {"instret",       GROUP_CSR  + CSR_INSTRET,    "org.gnu.gdb.riscv.csr", NULL},
+        {"cycleh",        GROUP_CSR  + CSR_CYCLEH,     "org.gnu.gdb.riscv.csr", NULL},
+        {"timeh",         GROUP_CSR  + CSR_TIMEH,      "org.gnu.gdb.riscv.csr", NULL},
+        {"instreth",      GROUP_CSR  + CSR_INSTRETH,   "org.gnu.gdb.riscv.csr", NULL},
+
+        {"sstatus",       GROUP_CSR  + CSR_SSTATUS,    "org.gnu.gdb.riscv.csr", NULL},
+        {"sedeleg",       GROUP_CSR  + CSR_SEDELG,     "org.gnu.gdb.riscv.csr", NULL},
+        {"sideleg",       GROUP_CSR  + CSR_SIDELEG,    "org.gnu.gdb.riscv.csr", NULL},
+        {"sie",           GROUP_CSR  + CSR_SIE,        "org.gnu.gdb.riscv.csr", NULL},
+        {"stvec",         GROUP_CSR  + CSR_STVEC,      "org.gnu.gdb.riscv.csr", NULL},
+        {"scounteren",    GROUP_CSR  + CSR_SCOUNTEREN, "org.gnu.gdb.riscv.csr", NULL},
+        {"sscratch",      GROUP_CSR  + CSR_SSCRATCH,   "org.gnu.gdb.riscv.csr", NULL},
+        {"sepc",          GROUP_CSR  + CSR_SEPC,       "org.gnu.gdb.riscv.csr", NULL},
+        {"scause",        GROUP_CSR  + CSR_SCAUSE,     "org.gnu.gdb.riscv.csr", NULL},
+        {"stval",         GROUP_CSR  + CSR_STVAL,      "org.gnu.gdb.riscv.csr", NULL},
+        {"sip",           GROUP_CSR  + CSR_SIP,        "org.gnu.gdb.riscv.csr", NULL},
+        {"satp",          GROUP_CSR  + CSR_SATP,       "org.gnu.gdb.riscv.csr", NULL},
+
+        {"mvendorid",     GROUP_CSR  + CSR_MVENDORID,  "org.gnu.gdb.riscv.csr", NULL},
+        {"marchid",       GROUP_CSR  + CSR_MARCHID,    "org.gnu.gdb.riscv.csr", NULL},
+        {"mimpid",        GROUP_CSR  + CSR_MIMPID,     "org.gnu.gdb.riscv.csr", NULL},
+        {"mhartid",       GROUP_CSR  + CSR_MHARTID,    "org.gnu.gdb.riscv.csr", NULL},
+        {"mstatus",       GROUP_CSR  + CSR_MSTATUS,    "org.gnu.gdb.riscv.csr", NULL},
+        {"misa",          GROUP_CSR  + CSR_MISA,       "org.gnu.gdb.riscv.csr", NULL},
+        {"medeleg",       GROUP_CSR  + CSR_MEDELEG,    "org.gnu.gdb.riscv.csr", NULL},
+        {"mideleg",       GROUP_CSR  + CSR_MIDELED,    "org.gnu.gdb.riscv.csr", NULL},
+        {"mie",           GROUP_CSR  + CSR_MIE,        "org.gnu.gdb.riscv.csr", NULL},
+        {"mnmivec",       GROUP_CSR  + CSR_MNMIVEC,    "org.gnu.gdb.riscv.csr", NULL},
+        {"mtvec",         GROUP_CSR  + CSR_MTVEC,      "org.gnu.gdb.riscv.csr", NULL},
+        {"mcounteren",    GROUP_CSR  + CSR_MCOUNTEREN, "org.gnu.gdb.riscv.csr", NULL},
+        {"mscratch",      GROUP_CSR  + CSR_MSCRATCH,   "org.gnu.gdb.riscv.csr", NULL},
+        {"mepc",          GROUP_CSR  + CSR_MEPC,       "org.gnu.gdb.riscv.csr", NULL},
+        {"mcause",        GROUP_CSR  + CSR_MCAUSE,     "org.gnu.gdb.riscv.csr", NULL},
+        {"mtval",         GROUP_CSR  + CSR_MTVAL,      "org.gnu.gdb.riscv.csr", NULL},
+        {"mip",           GROUP_CSR  + CSR_MIP,        "org.gnu.gdb.riscv.csr", NULL},
+
+        {"pmpcfg0",       GROUP_CSR  + CSR_PMPCFG0,    "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpcfg1",       GROUP_CSR  + CSR_PMPCFG1,    "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpcfg2",       GROUP_CSR  + CSR_PMPCFG2,    "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpcfg3",       GROUP_CSR  + CSR_PMPCFG3,    "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr0",       GROUP_CSR  + CSR_PMPCFG4,    "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr1",       GROUP_CSR  + CSR_PMPADDR1,   "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr2",       GROUP_CSR  + CSR_PMPADDR2,   "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr3",       GROUP_CSR  + CSR_PMPADDR3,   "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr4",       GROUP_CSR  + CSR_PMPADDR4,   "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr5",       GROUP_CSR  + CSR_PMPADDR5,   "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr6",       GROUP_CSR  + CSR_PMPADDR6,   "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr7",       GROUP_CSR  + CSR_PMPADDR7,   "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr8",       GROUP_CSR  + CSR_PMPADDR8,   "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr9",       GROUP_CSR  + CSR_PMPADDR9,   "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr10",      GROUP_CSR  + CSR_PMPADDR10,  "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr11",      GROUP_CSR  + CSR_PMPADDR11,  "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr12",      GROUP_CSR  + CSR_PMPADDR12,  "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr13",      GROUP_CSR  + CSR_PMPADDR13,  "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr14",      GROUP_CSR  + CSR_PMPADDR14,  "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr15",      GROUP_CSR  + CSR_PMPADDR15,  "org.gnu.gdb.riscv.csr", NULL},
+
+        {"mcycle",        GROUP_CSR  + CSR_MCYCLE,     "org.gnu.gdb.riscv.csr", NULL},
+        {"minstret",      GROUP_CSR  + CSR_MINSTRET,   "org.gnu.gdb.riscv.csr", NULL},
+        {"mcycleh",       GROUP_CSR  + CSR_MCYCLEH,    "org.gnu.gdb.riscv.csr", NULL},
+        {"minstreth",     GROUP_CSR  + CSR_MINSTRETH,  "org.gnu.gdb.riscv.csr", NULL},
 
 
 	/* Debug Unit Internals */
-	{"ppc",         GROUP_GPRS + 0x200, "org.gnu.gdb.rvl.dbg", NULL},
-	{"npc",         GROUP_GPRS + 0x201, "org.gnu.gdb.rvl.dbg", NULL},
-	{"dbgctrl",     GROUP_DBG  +  0x00, "org.gnu.gdb.rvl.dbg", NULL},
-	{"dbghit",      GROUP_DBG  +  0x01, "org.gnu.gdb.rvl.dbg", NULL},
-	{"dbgie",       GROUP_DBG  +  0x02, "org.gnu.gdb.rvl.dbg", NULL},
-	{"dbgcause",    GROUP_DBG  +  0x03, "org.gnu.gdb.rvl.dbg", NULL},
-	{"dbg.bpctrl0", GROUP_DBG  +  0x10, "org.gnu.gdb.rvl.dbg", NULL},
-	{"dbg.bpdata0", GROUP_DBG  +  0x11, "org.gnu.gdb.rvl.dbg", NULL},
-	{"dbg.bpctrl1", GROUP_DBG  +  0x12, "org.gnu.gbd.rvl.dbg", NULL},
-	{"dbg.bpdata1", GROUP_DBG  +  0x13, "org.gnu.gdb.rvl.dbg", NULL},
-	{"dbg.bpctrl2", GROUP_DBG  +  0x14, "org.gnu.gdb.rvl.dbg", NULL},
-	{"dbg.bpdata2", GROUP_DBG  +  0x15, "org.gnu.gdb.rvl.dbg", NULL},
+	{"ppc",           GROUP_GPRS + 0x200,          "org.gnu.gdb.rvl.dbg", NULL},
+	{"npc",           GROUP_GPRS + 0x201,          "org.gnu.gdb.rvl.dbg", NULL},
+	{"dbgctrl",       GROUP_DBG  +  0x00,          "org.gnu.gdb.rvl.dbg", NULL},
+	{"dbghit",        GROUP_DBG  +  0x01,          "org.gnu.gdb.rvl.dbg", NULL},
+	{"dbgie",         GROUP_DBG  +  0x02,          "org.gnu.gdb.rvl.dbg", NULL},
+	{"dbgcause",      GROUP_DBG  +  0x03,          "org.gnu.gdb.rvl.dbg", NULL},
+	{"dbg.bpctrl0",   GROUP_DBG  +  0x10,          "org.gnu.gdb.rvl.dbg", NULL},
+	{"dbg.bpdata0",   GROUP_DBG  +  0x11,          "org.gnu.gdb.rvl.dbg", NULL},
+	{"dbg.bpctrl1",   GROUP_DBG  +  0x12,          "org.gnu.gbd.rvl.dbg", NULL},
+	{"dbg.bpdata1",   GROUP_DBG  +  0x13,          "org.gnu.gdb.rvl.dbg", NULL},
+	{"dbg.bpctrl2",   GROUP_DBG  +  0x14,          "org.gnu.gdb.rvl.dbg", NULL},
+	{"dbg.bpdata2",   GROUP_DBG  +  0x15,          "org.gnu.gdb.rvl.dbg", NULL},
 };
 
-static int or1k_add_reg(struct target *target, struct or1k_core_reg *new_reg)
+static int rvl_add_reg(struct target *target, struct or1k_core_reg *new_reg)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	int reg_list_size = or1k->nb_regs * sizeof(struct or1k_core_reg);
+	struct rvl_common *rvl = target_to_rvl(target);
+	int reg_list_size = rvl->nb_regs * sizeof(struct rvl_core_reg);
 
-	or1k_core_reg_list_arch_info = realloc(or1k_core_reg_list_arch_info,
-				reg_list_size + sizeof(struct or1k_core_reg));
+	rvl_core_reg_list_arch_info = realloc(rvl_core_reg_list_arch_info,
+				reg_list_size + sizeof(struct rvl_core_reg));
 
-	memcpy(&or1k_core_reg_list_arch_info[or1k->nb_regs], new_reg,
-		sizeof(struct or1k_core_reg));
+	memcpy(&rvl_core_reg_list_arch_info[rvl->nb_regs], new_reg,
+		sizeof(struct rvl_core_reg));
 
-	or1k_core_reg_list_arch_info[or1k->nb_regs].list_num = or1k->nb_regs;
+	rvl_core_reg_list_arch_info[rvl->nb_regs].list_num = rvl->nb_regs;
 
-	or1k->nb_regs++;
+	rvl->nb_regs++;
 
 	return ERROR_OK;
 }
 
-static int or1k_create_reg_list(struct target *target)
+static int rvl_create_reg_list(struct target *target)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
+	struct rvl_common *rvl = target_to_rvl(target);
 
 	LOG_DEBUG("-");
 
-	or1k_core_reg_list_arch_info = malloc(ARRAY_SIZE(or1k_init_reg_list) *
-				       sizeof(struct or1k_core_reg));
+	rvl_core_reg_list_arch_info = malloc(ARRAY_SIZE(rvl_init_reg_list) *
+				       sizeof(struct rvl_core_reg));
 
-	for (int i = 0; i < (int)ARRAY_SIZE(or1k_init_reg_list); i++) {
-		or1k_core_reg_list_arch_info[i].name = or1k_init_reg_list[i].name;
-		or1k_core_reg_list_arch_info[i].spr_num = or1k_init_reg_list[i].spr_num;
-		or1k_core_reg_list_arch_info[i].group = or1k_init_reg_list[i].group;
-		or1k_core_reg_list_arch_info[i].feature = or1k_init_reg_list[i].feature;
-		or1k_core_reg_list_arch_info[i].list_num = i;
-		or1k_core_reg_list_arch_info[i].target = NULL;
-		or1k_core_reg_list_arch_info[i].or1k_common = NULL;
+	for (int i = 0; i < (int)ARRAY_SIZE(rvl_init_reg_list); i++) {
+		rvl_core_reg_list_arch_info[i].name        = rvl_init_reg_list[i].name;
+		rvl_core_reg_list_arch_info[i].spr_num     = rvl_init_reg_list[i].spr_num;
+		rvl_core_reg_list_arch_info[i].group       = rvl_init_reg_list[i].group;
+		rvl_core_reg_list_arch_info[i].feature     = rvl_init_reg_list[i].feature;
+		rvl_core_reg_list_arch_info[i].list_num    = i;
+		rvl_core_reg_list_arch_info[i].target      = NULL;
+		rvl_core_reg_list_arch_info[i].or1k_common = NULL;
 	}
 
-	or1k->nb_regs = ARRAY_SIZE(or1k_init_reg_list);
-
-	struct or1k_core_reg new_reg;
-	new_reg.target = NULL;
-	new_reg.or1k_common = NULL;
-
-	char name[32];
-	for (int way = 0; way < 4; way++) {
-		for (int i = 0; i < 128; i++) {
-
-			sprintf(name, "dtlbw%dmr%d", way, i);
-			new_reg.name = strdup(name);
-			new_reg.spr_num = GROUP1 + 512 + i + (way * 256);
-			new_reg.feature = "org.gnu.gdb.or1k.group1";
-			new_reg.group = "dmmu";
-			or1k_add_reg(target, &new_reg);
-
-			sprintf(name, "dtlbw%dtr%d", way, i);
-			new_reg.name = strdup(name);
-			new_reg.spr_num = GROUP1 + 640 + i + (way * 256);
-			new_reg.feature = "org.gnu.gdb.or1k.group1";
-			new_reg.group = "dmmu";
-			or1k_add_reg(target, &new_reg);
-
-
-			sprintf(name, "itlbw%dmr%d", way, i);
-			new_reg.name = strdup(name);
-			new_reg.spr_num = GROUP2 + 512 + i + (way * 256);
-			new_reg.feature = "org.gnu.gdb.or1k.group2";
-			new_reg.group = "immu";
-			or1k_add_reg(target, &new_reg);
-
-
-			sprintf(name, "itlbw%dtr%d", way, i);
-			new_reg.name = strdup(name);
-			new_reg.spr_num = GROUP2 + 640 + i + (way * 256);
-			new_reg.feature = "org.gnu.gdb.or1k.group2";
-			new_reg.group = "immu";
-			or1k_add_reg(target, &new_reg);
-
-		}
-	}
+	rvl->nb_regs = ARRAY_SIZE(rvl_init_reg_list);
 
 	return ERROR_OK;
 }
 
-static int or1k_jtag_read_regs(struct or1k_common *or1k, uint32_t *regs)
+static int rvl_jtag_read_regs(struct rvl_common *rvl, uint32_t *regs)
 {
-	struct or1k_du *du_core = or1k_jtag_to_du(&or1k->jtag);
+	struct rvl_du *du_core = rvl_jtag_to_du(&rvl->jtag);
 
 	LOG_DEBUG("-");
 
-	return du_core->or1k_jtag_read_cpu(&or1k->jtag,
-			or1k->arch_info[OR1K_REG_R0].spr_num, OR1K_REG_R31 + 1,
-			regs + OR1K_REG_R0);
+	return du_core->rvl_jtag_read_cpu(&rvl->jtag,
+			rvl->arch_info[GDB_REGNO_ZERO].spr_num, GDB_REGNO_XPR31 + 1,
+			regs + GDB_REGNO_ZERO);
 }
 
-static int or1k_jtag_write_regs(struct or1k_common *or1k, uint32_t *regs)
+static int rvl_jtag_write_regs(struct rvl_common *rvl, uint32_t *regs)
 {
-	struct or1k_du *du_core = or1k_jtag_to_du(&or1k->jtag);
+	struct rvl_du *du_core = rvl_jtag_to_du(&rvl->jtag);
 
 	LOG_DEBUG("-");
 
-	return du_core->or1k_jtag_write_cpu(&or1k->jtag,
-			or1k->arch_info[OR1K_REG_R0].spr_num, OR1K_REG_R31 + 1,
-			&regs[OR1K_REG_R0]);
+	return du_core->rvl_jtag_write_cpu(&rvl->jtag,
+			rvl->arch_info[GDB_REGNO_ZERO].spr_num, GDB_REGNO_XPR31 + 1,
+			&regs[GDB_REGNO_ZERO]);
 }
 
-static int or1k_save_context(struct target *target)
+static int rvl_save_context(struct target *target)
 {
-	struct or1k_common *or1k = target_to_or1k(target);
-	struct or1k_du *du_core = or1k_to_du(or1k);
+	struct rvl_common *rvl = target_to_rvl(target);
+	struct rvl_du *du_core = rvl_to_du(rvl);
 	int regs_read = 0;
 	int retval;
 
 	LOG_DEBUG("-");
 
-	for (int i = 0; i < OR1KNUMCOREREGS; i++) {
-		if (!or1k->core_cache->reg_list[i].valid) {
+	for (int i = 0; i < GDB_REG_XPR31; i++) {
+		if (!rvl->core_cache->reg_list[i].valid) {
 			if (i == OR1K_REG_PPC || i == OR1K_REG_NPC || i == OR1K_REG_SR) {
 				retval = du_core->or1k_jtag_read_cpu(&or1k->jtag,
 						or1k->arch_info[i].spr_num, 1,
@@ -236,7 +268,7 @@ static int or1k_save_context(struct target *target)
 			}
 			/* We've just updated the core_reg[i], now update
 			   the core cache */
-			or1k_read_core_reg(target, i);
+			rvl_read_core_reg(target, i);
 		}
 	}
 
