@@ -30,15 +30,7 @@
 #define CPU_NOT_RESET	1
 
 
-struct rl_jtag {
-	struct  jtag_tap *tap;
-	int     rl_jtag_inited;
-	int r   l_jtag_module_selected;
-	uint8_t *current_reg_idx;
-	struct  rl_tap_ip *tap_ip;
-	struct  rl_du *du_core;
-	struct  target *target;
-};
+
 
 
 int rl_dbg_adv_register(void);

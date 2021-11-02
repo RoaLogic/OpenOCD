@@ -25,8 +25,8 @@
 
 #include <server/telnet_server.h>
 
-#include "rvl_tap.h"
-#include "rvl_du.h"
+#include "rl_tap.h"
+#include "rl_dbg_adv.h"
 #include "jsp_server.h"
 
 static char *jsp_port;

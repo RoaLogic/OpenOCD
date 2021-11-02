@@ -30,10 +30,9 @@
 #include <target/target_type.h>
 #include <helper/time_support.h>
 #include <helper/fileio.h>
-#include <target/riscv/encoding.h>
 #include "rl_tap.h"
 #include "rvl.h"
-#include "rvl_du.h"
+#include "rl_dbg_adv.h"
 
 LIST_HEAD(tap_list);
 LIST_HEAD(du_list);
@@ -105,7 +104,7 @@ static const struct rvl_core_reg_init rvl_init_reg_list[] = {
         {"instreth",      GROUP_CSR  + CSR_INSTRETH,   "org.gnu.gdb.riscv.csr", NULL},
 
         {"sstatus",       GROUP_CSR  + CSR_SSTATUS,    "org.gnu.gdb.riscv.csr", NULL},
-        {"sedeleg",       GROUP_CSR  + CSR_SEDELG,     "org.gnu.gdb.riscv.csr", NULL},
+        {"sedeleg",       GROUP_CSR  + CSR_SEDELEG,     "org.gnu.gdb.riscv.csr", NULL},
         {"sideleg",       GROUP_CSR  + CSR_SIDELEG,    "org.gnu.gdb.riscv.csr", NULL},
         {"sie",           GROUP_CSR  + CSR_SIE,        "org.gnu.gdb.riscv.csr", NULL},
         {"stvec",         GROUP_CSR  + CSR_STVEC,      "org.gnu.gdb.riscv.csr", NULL},
@@ -124,7 +123,7 @@ static const struct rvl_core_reg_init rvl_init_reg_list[] = {
         {"mstatus",       GROUP_CSR  + CSR_MSTATUS,    "org.gnu.gdb.riscv.csr", NULL},
         {"misa",          GROUP_CSR  + CSR_MISA,       "org.gnu.gdb.riscv.csr", NULL},
         {"medeleg",       GROUP_CSR  + CSR_MEDELEG,    "org.gnu.gdb.riscv.csr", NULL},
-        {"mideleg",       GROUP_CSR  + CSR_MIDELED,    "org.gnu.gdb.riscv.csr", NULL},
+        {"mideleg",       GROUP_CSR  + CSR_MIDELEG,    "org.gnu.gdb.riscv.csr", NULL},
         {"mie",           GROUP_CSR  + CSR_MIE,        "org.gnu.gdb.riscv.csr", NULL},
         {"mnmivec",       GROUP_CSR  + CSR_MNMIVEC,    "org.gnu.gdb.riscv.csr", NULL},
         {"mtvec",         GROUP_CSR  + CSR_MTVEC,      "org.gnu.gdb.riscv.csr", NULL},
@@ -139,7 +138,7 @@ static const struct rvl_core_reg_init rvl_init_reg_list[] = {
         {"pmpcfg1",       GROUP_CSR  + CSR_PMPCFG1,    "org.gnu.gdb.riscv.csr", NULL},
         {"pmpcfg2",       GROUP_CSR  + CSR_PMPCFG2,    "org.gnu.gdb.riscv.csr", NULL},
         {"pmpcfg3",       GROUP_CSR  + CSR_PMPCFG3,    "org.gnu.gdb.riscv.csr", NULL},
-        {"pmpadr0",       GROUP_CSR  + CSR_PMPCFG4,    "org.gnu.gdb.riscv.csr", NULL},
+        {"pmpadr0",       GROUP_CSR  + CSR_PMPADDR0,   "org.gnu.gdb.riscv.csr", NULL},
         {"pmpadr1",       GROUP_CSR  + CSR_PMPADDR1,   "org.gnu.gdb.riscv.csr", NULL},
         {"pmpadr2",       GROUP_CSR  + CSR_PMPADDR2,   "org.gnu.gdb.riscv.csr", NULL},
         {"pmpadr3",       GROUP_CSR  + CSR_PMPADDR3,   "org.gnu.gdb.riscv.csr", NULL},
@@ -177,7 +176,7 @@ static const struct rvl_core_reg_init rvl_init_reg_list[] = {
 	{"dbg.bpdata2",   GROUP_DBG  +  0x15,          "org.gnu.gdb.rvl.dbg", NULL},
 };
 
-static int rvl_add_reg(struct target *target, struct or1k_core_reg *new_reg)
+static int rvl_add_reg(struct target *target, struct rvl_core_reg *new_reg)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
 	int reg_list_size = rvl->nb_regs * sizeof(struct rvl_core_reg);
@@ -211,7 +210,7 @@ static int rvl_create_reg_list(struct target *target)
 		rvl_core_reg_list_arch_info[i].feature     = rvl_init_reg_list[i].feature;
 		rvl_core_reg_list_arch_info[i].list_num    = i;
 		rvl_core_reg_list_arch_info[i].target      = NULL;
-		rvl_core_reg_list_arch_info[i].or1k_common = NULL;
+		rvl_core_reg_list_arch_info[i].rvl_common = NULL;
 	}
 
 	rvl->nb_regs = ARRAY_SIZE(rvl_init_reg_list);
@@ -221,22 +220,22 @@ static int rvl_create_reg_list(struct target *target)
 
 static int rvl_jtag_read_regs(struct rvl_common *rvl, uint32_t *regs)
 {
-	struct rvl_du *du_core = rvl_jtag_to_du(&rvl->jtag);
+	struct rl_du *du_core = rl_jtag_to_du(&rvl->jtag);
 
 	LOG_DEBUG("-");
 
-	return du_core->rvl_jtag_read_cpu(&rvl->jtag,
+	return du_core->rl_jtag_read_cpu(&rvl->jtag,
 			rvl->arch_info[GDB_REGNO_ZERO].spr_num, GDB_REGNO_XPR31 + 1,
 			regs + GDB_REGNO_ZERO);
 }
 
 static int rvl_jtag_write_regs(struct rvl_common *rvl, uint32_t *regs)
 {
-	struct rvl_du *du_core = rvl_jtag_to_du(&rvl->jtag);
+	struct rl_du *du_core = rl_jtag_to_du(&rvl->jtag);
 
 	LOG_DEBUG("-");
 
-	return du_core->rvl_jtag_write_cpu(&rvl->jtag,
+	return du_core->rl_jtag_write_cpu(&rvl->jtag,
 			rvl->arch_info[GDB_REGNO_ZERO].spr_num, GDB_REGNO_XPR31 + 1,
 			&regs[GDB_REGNO_ZERO]);
 }
@@ -244,7 +243,7 @@ static int rvl_jtag_write_regs(struct rvl_common *rvl, uint32_t *regs)
 static int rvl_save_context(struct target *target)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 	int regs_read = 0;
 	int retval;
 
@@ -257,7 +256,7 @@ static int rvl_save_context(struct target *target)
             // Read the PC for the PPC
 		    if (i == GDB_REGNO_PC) 
             {
-				retval = du_core->rvl_jtag_read_cpu(&rvl->jtag,
+				retval = du_core->rl_jtag_read_cpu(&rvl->jtag,
                         // Read the PPC register
 						(GROUP_GPRS + 0x200), 1,
 						&rvl->core_regs[i]);
@@ -286,7 +285,7 @@ static int rvl_save_context(struct target *target)
 static int rvl_restore_context(struct target *target)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 	int reg_write = 0;
 	int retval;
 
@@ -300,7 +299,7 @@ static int rvl_restore_context(struct target *target)
 
 			if (i == GDB_REGNO_PC) 
             {
-				retval = du_core->rvl_jtag_write_cpu(&rvl->jtag,
+				retval = du_core->rl_jtag_write_cpu(&rvl->jtag,
                         // Write the PC to the NPC reg
 						(GROUP_GPRS + 0x201), 1,
 						&rvl->core_regs[i]);
@@ -331,7 +330,7 @@ static int rvl_restore_context(struct target *target)
 static int rvl_read_core_reg(struct target *target, int num)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 	uint32_t reg_value;
 
 	LOG_DEBUG("-");
@@ -339,7 +338,7 @@ static int rvl_read_core_reg(struct target *target, int num)
 	if ((num < 0) || (num >= rvl->nb_regs))
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	if ((num >= 0) && (num < GBD_REGNO_COUNT)) 
+	if ((num >= 0) && (num < GDB_REGNO_COUNT)) 
     {
 		reg_value = rvl->core_regs[num];
 		buf_set_u32(rvl->core_cache->reg_list[num].value, 0, 32, reg_value);
@@ -350,7 +349,7 @@ static int rvl_read_core_reg(struct target *target, int num)
     else 
     {
 		/* This is an spr, always read value from HW */
-		int retval = du_core->rvl_jtag_read_cpu(&rvl->jtag,
+		int retval = du_core->rl_jtag_read_cpu(&rvl->jtag,
 							 rvl->arch_info[num].spr_num, 1, &reg_value);
 		if (retval != ERROR_OK) {
 			LOG_ERROR("Error while reading spr 0x%08" PRIx32, rvl->arch_info[num].spr_num);
@@ -369,7 +368,7 @@ static int rvl_write_core_reg(struct target *target, int num)
 
 	LOG_DEBUG("-");
 
-	if ((num < 0) || (num >= GBD_REGNO_COUNT))
+	if ((num < 0) || (num >= GDB_REGNO_COUNT))
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
 	uint32_t reg_value = buf_get_u32(rvl->core_cache->reg_list[num].value, 0, 32);
@@ -399,7 +398,7 @@ static int rvl_set_core_reg(struct reg *reg, uint8_t *buf)
 	struct rvl_core_reg *rvl_reg = reg->arch_info;
 	struct target *target = rvl_reg->target;
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 	uint32_t value = buf_get_u32(buf, 0, 32);
 
 	LOG_DEBUG("-");
@@ -407,7 +406,7 @@ static int rvl_set_core_reg(struct reg *reg, uint8_t *buf)
 	if (target->state != TARGET_HALTED)
 		return ERROR_TARGET_NOT_HALTED;
 
-	if (or1k_reg->list_num < GBD_REGNO_COUNT) 
+	if (rvl_reg->list_num < GDB_REGNO_COUNT) 
     {
 		buf_set_u32(reg->value, 0, 32, value);
 		reg->dirty = true;
@@ -416,10 +415,10 @@ static int rvl_set_core_reg(struct reg *reg, uint8_t *buf)
     else 
     {
 		/* This is an spr, write it to the HW */
-		int retval = du_core->rvl_jtag_write_cpu(&rvl->jtag,
+		int retval = du_core->rl_jtag_write_cpu(&rvl->jtag,
 							  rvl_reg->spr_num, 1, &value);
 		if (retval != ERROR_OK) {
-			LOG_ERROR("Error while writing spr 0x%08" PRIx32, or1k_reg->spr_num);
+			LOG_ERROR("Error while writing spr 0x%08" PRIx32, rvl_reg->spr_num);
 			return retval;
 		}
 	}
@@ -434,11 +433,11 @@ static const struct reg_arch_type rvl_reg_type = {
 
 static struct reg_cache *rvl_build_reg_cache(struct target *target)
 {
-	struct rvl_common *or1k = target_to_rvl(target);
+	struct rvl_common *rvl = target_to_rvl(target);
 	struct reg_cache **cache_p = register_get_last_cache_p(&target->reg_cache);
 	struct reg_cache *cache = malloc(sizeof(struct reg_cache));
-	struct reg *reg_list = calloc(or1k->nb_regs, sizeof(struct reg));
-	struct rvl_core_reg *arch_info = malloc((or1k->nb_regs) * sizeof(struct rvl_core_reg));
+	struct reg *reg_list = calloc(rvl->nb_regs, sizeof(struct reg));
+	struct rvl_core_reg *arch_info = malloc((rvl->nb_regs) * sizeof(struct rvl_core_reg));
 	struct reg_feature *feature;
 
 	LOG_DEBUG("-");
@@ -488,20 +487,20 @@ static int rvl_debug_entry(struct target *target)
 	}
 
 	struct rvl_common *rvl = target_to_rvl(target);
-	uint32_t addr = rvl->core_regs[OR1K_REG_NPC];
+	uint32_t addr = rvl->core_regs[GDB_REGNO_PC];
 
 	if (breakpoint_find(target, addr))
 		/* Halted on a breakpoint, step back to permit executing the instruction there */
-		retval = rvl_set_core_reg(&rvl->core_cache->reg_list[OR1K_REG_NPC],
+		retval = rvl_set_core_reg(&rvl->core_cache->reg_list[GDB_REGNO_PC],
 					   (uint8_t *)&addr);
 
 	return retval;
 }
 
-static int or1k_halt(struct target *target)
+static int rvl_halt(struct target *target)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 
 	LOG_DEBUG("target->state: %s", target_state_name(target));
 
@@ -526,7 +525,7 @@ static int or1k_halt(struct target *target)
 		}
 	}
 
-	int retval = du_core->rvl_cpu_stall(&rvl->jtag, CPU_STALL);
+	int retval = du_core->rl_cpu_stall(&rvl->jtag, CPU_STALL);
 	if (retval != ERROR_OK) 
     {
 		LOG_ERROR("Impossible to stall the CPU");
@@ -538,10 +537,10 @@ static int or1k_halt(struct target *target)
 	return ERROR_OK;
 }
 
-static int rvl_is_cpu_running(struct target *target, int *running)
+static int rl_is_cpu_running(struct target *target, int *running)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 	int retval;
 	int tries = 0;
 	const int RETRIES_MAX = 5;
@@ -554,13 +553,13 @@ static int rvl_is_cpu_running(struct target *target, int *running)
 
 		tries++;
 
-		retval = du_core->rvl_is_cpu_running(&rvl->jtag, running);
+		retval = du_core->rl_is_cpu_running(&rvl->jtag, running);
 		if (retval != ERROR_OK) {
 			LOG_WARNING("Debug IF CPU control reg read failure.");
 			/* Try once to restart the JTAG infrastructure -
 			   quite possibly the board has just been reset. */
 			LOG_WARNING("Resetting JTAG TAP state and reconnecting to debug IF.");
-			du_core->rvl_jtag_init(&rvl->jtag);
+			du_core->rl_jtag_init(&rvl->jtag);
 
 			LOG_WARNING("...attempt %d of %d", tries, RETRIES_MAX);
 
@@ -580,7 +579,7 @@ static int rvl_poll(struct target *target)
 	int retval;
 	int running;
 
-	retval = rvl_is_cpu_running(target, &running);
+	retval = rl_is_cpu_running(target, &running);
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while calling or1k_is_cpu_running");
 		return retval;
@@ -654,11 +653,11 @@ static int rvl_poll(struct target *target)
 static int rvl_assert_reset(struct target *target)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 
 	LOG_DEBUG("-");
 
-	int retval = du_core->rvl_cpu_reset(&rvl->jtag, CPU_RESET);
+	int retval = du_core->rl_cpu_reset(&rvl->jtag, CPU_RESET);
 
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while asserting RESET");
@@ -671,11 +670,11 @@ static int rvl_assert_reset(struct target *target)
 static int rvl_deassert_reset(struct target *target)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 
 	LOG_DEBUG("-");
 
-	int retval = du_core->rvl_cpu_reset(&rvl->jtag, CPU_NOT_RESET);
+	int retval = du_core->rl_cpu_reset(&rvl->jtag, CPU_NOT_RESET);
 	if (retval != ERROR_OK) 
     {
 		LOG_ERROR("Error while deasserting RESET");
@@ -688,11 +687,11 @@ static int rvl_deassert_reset(struct target *target)
 static int rvl_soft_reset_halt(struct target *target)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 
 	LOG_DEBUG("-");
 
-	int retval = du_core->rvl_cpu_stall(&rvl->jtag, CPU_STALL);
+	int retval = du_core->rl_cpu_stall(&rvl->jtag, CPU_STALL);
 
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while stalling the CPU");
@@ -728,9 +727,9 @@ static int rvl_resume_or_step(struct target *target, int current,
 			       int debug_execution, int step)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 	struct breakpoint *breakpoint = NULL;
-	uint32_t resume_pc;
+	uint32_t resume_pc = 0;
 	uint32_t debug_reg_list[RVL_DEBUG_REG_NUM];
 
 	LOG_DEBUG("Addr: 0x%" PRIx32 ", stepping: %s, handle breakpoints %s\n",
@@ -755,7 +754,7 @@ static int rvl_resume_or_step(struct target *target, int current,
 	}
 
 	/* read debug registers (starting from DMR1 register) */
-	retval = du_core->rvl_jtag_read_cpu(&or1k->jtag, RVL_DEBUG_REG_CTRL,
+	retval = du_core->rl_jtag_read_cpu(&rvl->jtag, RVL_DEBUG_REG_CTRL,
 					     RVL_DEBUG_REG_NUM, debug_reg_list);
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while reading debug registers");
@@ -763,34 +762,34 @@ static int rvl_resume_or_step(struct target *target, int current,
 	}
 
 	/* Clear Debug Reason Register (DRR) */
-	debug_reg_list[RVL_DEBUG_REG_CAUSE] = 0;
+//	debug_reg_list[RVL_DEBUG_REG_CAUSE] = 0;
 
 	/* Clear watchpoint break generation in Debug Mode Register 2 (DMR2) */
-	debug_reg_list[OR1K_DEBUG_REG_DMR2] &= ~OR1K_DMR2_WGB;
-	if (step)
+//	debug_reg_list[OR1K_DEBUG_REG_DMR2] &= ~OR1K_DMR2_WGB;
+//	if (step)
 		/* Set the single step trigger in Debug Mode Register 1 (DMR1) */
-		debug_reg_list[RVL_DEBUG_REG_CTRL] |= OR1K_DMR1_ST | OR1K_DMR1_BT;
-	else
+//		debug_reg_list[RVL_DEBUG_REG_CTRL] |= OR1K_DMR1_ST | OR1K_DMR1_BT;
+//	else
 		/* Clear the single step trigger in Debug Mode Register 1 (DMR1) */
-		debug_reg_list[RVL_DEBUG_REG_CTRL] &= ~(OR1K_DMR1_ST | OR1K_DMR1_BT);
+//		debug_reg_list[RVL_DEBUG_REG_CTRL] &= ~(OR1K_DMR1_ST | OR1K_DMR1_BT);
 
 	/* Set traps to be handled by the debug unit in the Debug Stop
 	   Register (DSR). Check if we have any software breakpoints in
 	   place before setting this value - the kernel, for instance,
 	   relies on l.trap instructions not stalling the processor ! */
 	if (is_any_soft_breakpoint(target) == true)
-		debug_reg_list[OR1K_DEBUG_REG_DSR] |= OR1K_DSR_TE;
+//		debug_reg_list[OR1K_DEBUG_REG_DSR] |= OR1K_DSR_TE;
 
 	/* Write debug registers (starting from DMR1 register) */
-	retval = du_core->rvl_jtag_write_cpu(&rvl->jtag, OR1K_DMR1_CPU_REG_ADD, OR1K_DEBUG_REG_NUM, debug_reg_list);
+//	retval = du_core->rl_jtag_write_cpu(&rvl->jtag, OR1K_DMR1_CPU_REG_ADD, OR1K_DEBUG_REG_NUM, debug_reg_list);
 
-	if (retval != ERROR_OK) 
-    {
-		LOG_ERROR("Error while writing back debug registers");
-		return retval;
-	}
+//	if (retval != ERROR_OK) 
+//    {
+//		LOG_ERROR("Error while writing back debug registers");
+//		return retval;
+//	}
 
-	resume_pc = buf_get_u32(rvl->core_cache->reg_list[OR1K_REG_NPC].value, 0, 32);
+	resume_pc = buf_get_u32(rvl->core_cache->reg_list[0].value, 0, 32);
 
 	/* The front-end may request us not to handle breakpoints */
 	if (handle_breakpoints) 
@@ -807,7 +806,7 @@ static int rvl_resume_or_step(struct target *target, int current,
 	}
 
 	/* Unstall time */
-	retval = du_core->rvl_cpu_stall(&rvl->jtag, CPU_UNSTALL);
+	retval = du_core->rl_cpu_stall(&rvl->jtag, CPU_UNSTALL);
 	if (retval != ERROR_OK) 
     {
 		LOG_ERROR("Error while unstalling the CPU");
@@ -859,7 +858,7 @@ static int rvl_add_breakpoint(struct target *target,
 			       struct breakpoint *breakpoint)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 	uint8_t data;
 
 	LOG_DEBUG("Adding breakpoint: addr 0x%08" TARGET_PRIxADDR ", len %d, type %d, set: %d, id: %" PRIu32,
@@ -871,7 +870,7 @@ static int rvl_add_breakpoint(struct target *target,
 		LOG_ERROR("HW breakpoints not supported for now. Doing SW breakpoint.");
 
 	/* Read and save the instruction */
-	int retval = du_core->rvl_jtag_read_memory(&rvl->jtag,
+	int retval = du_core->rl_jtag_read_memory(&rvl->jtag,
 					 breakpoint->address,
 					 4,
 					 1,
@@ -893,7 +892,7 @@ static int rvl_add_breakpoint(struct target *target,
     // Add check for 16 bit instruction, at that point the 16 bit ebreak must be placed
 	uint8_t rvl_trap_insn[4];
 	target_buffer_set_u32(target, rvl_trap_insn, RV_EBREAK_INSTR);
-	retval = du_core->rvl_jtag_write_memory(&or1k->jtag,
+	retval = du_core->rl_jtag_write_memory(&rvl->jtag,
 					  breakpoint->address,
 					  4,
 					  1,
@@ -908,7 +907,7 @@ static int rvl_add_breakpoint(struct target *target,
     // TODO: Add instruction cache invalidation
 	/* invalidate instruction cache */
 	// uint32_t addr = breakpoint->address;
-	// retval = du_core->rvl_jtag_write_cpu(&rvl->jtag,
+	// retval = du_core->rl_jtag_write_cpu(&rvl->jtag,
 	// 		OR1K_ICBIR_CPU_REG_ADD, 1, &addr);
 	// if (retval != ERROR_OK) {
 	// 	LOG_ERROR("Error while invalidating the ICACHE");
@@ -922,7 +921,7 @@ static int rvl_remove_breakpoint(struct target *target,
 				  struct breakpoint *breakpoint)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 
 	LOG_DEBUG("Removing breakpoint: addr 0x%08" TARGET_PRIxADDR ", len %d, type %d, set: %d, id: %" PRIu32,
 		  breakpoint->address, breakpoint->length, breakpoint->type,
@@ -933,7 +932,7 @@ static int rvl_remove_breakpoint(struct target *target,
 		LOG_ERROR("HW breakpoints not supported for now. Doing SW breakpoint.");
 
 	/* Replace the removed instruction */
-	int retval = du_core->rvl_jtag_write_memory(&rvl->jtag,
+	int retval = du_core->rl_jtag_write_memory(&rvl->jtag,
 					  breakpoint->address,
 					  4,
 					  1,
@@ -948,7 +947,7 @@ static int rvl_remove_breakpoint(struct target *target,
     // TODO: Add instruction cache invalidation
 	/* invalidate instruction cache */
 	// uint32_t addr = breakpoint->address;
-	// retval = du_core->rvl_jtag_write_cpu(&rvl->jtag,
+	// retval = du_core->rl_jtag_write_cpu(&rvl->jtag,
 	// 		OR1K_ICBIR_CPU_REG_ADD, 1, &addr);
 	// if (retval != ERROR_OK) {
 	// 	LOG_ERROR("Error while invalidating the ICACHE");
@@ -976,7 +975,7 @@ static int rvl_read_memory(struct target *target, target_addr_t address,
 		uint32_t size, uint32_t count, uint8_t *buffer)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 
 	LOG_DEBUG("Read memory at 0x%08" TARGET_PRIxADDR ", size: %" PRIu32 ", count: 0x%08" PRIx32, address, size, count);
 
@@ -996,14 +995,14 @@ static int rvl_read_memory(struct target *target, target_addr_t address,
 		return ERROR_TARGET_UNALIGNED_ACCESS;
 	}
 
-	return du_core->rvl_jtag_read_memory(&rvl->jtag, address, size, count, buffer);
+	return du_core->rl_jtag_read_memory(&rvl->jtag, address, size, count, buffer);
 }
 
 static int rvl_write_memory(struct target *target, target_addr_t address,
 		uint32_t size, uint32_t count, const uint8_t *buffer)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 
 	LOG_DEBUG("Write memory at 0x%08" TARGET_PRIxADDR ", size: %" PRIu32 ", count: 0x%08" PRIx32, address, size, count);
 
@@ -1023,15 +1022,15 @@ static int rvl_write_memory(struct target *target, target_addr_t address,
 		return ERROR_TARGET_UNALIGNED_ACCESS;
 	}
 
-	return du_core->rvl_jtag_write_memory(&rvl->jtag, address, size, count, buffer);
+	return du_core->rl_jtag_write_memory(&rvl->jtag, address, size, count, buffer);
 }
 
 static int rvl_init_target(struct command_context *cmd_ctx,
 		struct target *target)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
-	struct rvl_jtag *jtag = &rvl->jtag;
+	struct rl_du *du_core = rl_to_du(rvl);
+	struct rl_jtag *jtag = &rvl->jtag;
 
 	if (!du_core) {
 		LOG_ERROR("No debug unit selected");
@@ -1044,8 +1043,8 @@ static int rvl_init_target(struct command_context *cmd_ctx,
 	}
 
 	rvl->jtag.tap = target->tap;
-	rvl->jtag.rvl_jtag_inited = 0;
-	rvl->jtag.rvl_jtag_module_selected = -1;
+	rvl->jtag.rl_jtag_inited = 0;
+	rvl->jtag.rl_jtag_module_selected = -1;
 	rvl->jtag.target = target;
 
 	rvl_build_reg_cache(target);
@@ -1066,7 +1065,7 @@ static int rvl_target_create(struct target *target, Jim_Interp *interp)
 
 	rl_universal_tap_register();
 
-	rvl_du_adv_register();
+	rl_dbg_adv_register();
 
 	return ERROR_OK;
 }
@@ -1074,7 +1073,7 @@ static int rvl_target_create(struct target *target, Jim_Interp *interp)
 static int rvl_examine(struct target *target)
 {
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 
 	if (!target_was_examined(target)) {
 
@@ -1082,7 +1081,7 @@ static int rvl_examine(struct target *target)
 
 		int running;
 
-		int retval = du_core->rvl_is_cpu_running(&rvl->jtag, &running);
+		int retval = du_core->rl_is_cpu_running(&rvl->jtag, &running);
 		if (retval != ERROR_OK) {
 			LOG_ERROR("Couldn't read the CPU state");
 			return retval;
@@ -1124,11 +1123,11 @@ static int rvl_get_gdb_reg_list(struct target *target, struct reg **reg_list[],
 			LOG_ERROR("Error while calling or1k_save_context");
 			return retval;
 		}
-		*reg_list_size = OR1KNUMCOREREGS;
+		*reg_list_size = GDB_REGNO_FPR0;
 		/* this is free()'d back in gdb_server.c's gdb_get_register_packet() */
 		*reg_list = malloc((*reg_list_size) * sizeof(struct reg *));
 
-		for (int i = 0; i < OR1KNUMCOREREGS; i++)
+		for (int i = 0; i < GDB_REGNO_FPR0; i++)
 			(*reg_list)[i] = &rvl->core_cache->reg_list[i];
 	} else {
 		*reg_list_size = rvl->nb_regs;
@@ -1158,7 +1157,7 @@ static int rvl_profiling(struct target *target, uint32_t *samples,
 {
 	struct timeval timeout, now;
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
+	struct rl_du *du_core = rl_to_du(rvl);
 	int retval = ERROR_OK;
 
 	gettimeofday(&timeout, NULL);
@@ -1180,7 +1179,7 @@ static int rvl_profiling(struct target *target, uint32_t *samples,
 
 	for (;;) {
 		uint32_t reg_value;
-		retval = du_core->rvl_jtag_read_cpu(&rvl->jtag, (GROUP_GPRS + 0x201) /* NPC */, 1, &reg_value);
+		retval = du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_GPRS + 0x201) /* NPC */, 1, &reg_value);
 		if (retval != ERROR_OK) {
 			LOG_ERROR("Error while reading NPC");
 			return retval;
@@ -1201,19 +1200,19 @@ static int rvl_profiling(struct target *target, uint32_t *samples,
 
 COMMAND_HANDLER(rvl_tap_select_command_handler)
 {
+	struct target *target = get_current_target(CMD_CTX);
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
-	struct rvl_jtag *jtag = &rvl->jtag;
-	struct rvl_tap_ip *or1k_tap;
+	struct rl_jtag *jtag = &rvl->jtag;
+	struct rl_tap_ip *rl_tap;
 
 	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	list_for_each_entry(rvl_tap, &tap_list, list) {
-		if (rvl_tap->name) {
-			if (!strcmp(CMD_ARGV[0], rvl_tap->name)) {
-				jtag->tap_ip = rv;_tap;
-				LOG_INFO("%s tap selected", rvl_tap->name);
+	list_for_each_entry(rl_tap, &tap_list, list) {
+		if (rl_tap->name) {
+			if (!strcmp(CMD_ARGV[0], rl_tap->name)) {
+				jtag->tap_ip = rl_tap;
+				LOG_INFO("%s tap selected", rl_tap->name);
 				return ERROR_OK;
 			}
 		}
@@ -1225,41 +1224,41 @@ COMMAND_HANDLER(rvl_tap_select_command_handler)
 
 COMMAND_HANDLER(rvl_tap_list_command_handler)
 {
-	struct rvl_tap_ip *or1k_tap;
+	struct rl_tap_ip *rl_tap;
 
 	if (CMD_ARGC != 0)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	list_for_each_entry(rvl_tap, &tap_list, list) {
-		if (rvl_tap->name)
-			command_print(CMD, "%s", rvl_tap->name);
+	list_for_each_entry(rl_tap, &tap_list, list) {
+		if (rl_tap->name)
+			command_print(CMD, "%s", rl_tap->name);
 	}
 
 	return ERROR_OK;
 }
 
-COMMAND_HANDLER(or1k_du_select_command_handler)
+COMMAND_HANDLER(rvl_du_select_command_handler)
 {
+	struct target *target = get_current_target(CMD_CTX);
 	struct rvl_common *rvl = target_to_rvl(target);
-	struct rvl_du *du_core = rvl_to_du(rvl);
-	struct rvl_jtag *jtag = &rvl->jtag;
-	struct rvl_du *rvl_du;
+	struct rl_jtag *jtag = &rvl->jtag;
+	struct rl_du *rl_du;
 
 	if (CMD_ARGC > 2)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	list_for_each_entry(rvl_du, &du_list, list) {
-		if (rvl_du->name) {
-			if (!strcmp(CMD_ARGV[0], rvl_du->name)) {
-				jtag->du_core = rvl_du;
-				LOG_INFO("%s debug unit selected", rvl_du->name);
+	list_for_each_entry(rl_du, &du_list, list) {
+		if (rl_du->name) {
+			if (!strcmp(CMD_ARGV[0], rl_du->name)) {
+				jtag->du_core = rl_du;
+				LOG_INFO("%s debug unit selected", rl_du->name);
 
 				if (CMD_ARGC == 2) {
 					int options;
 					COMMAND_PARSE_NUMBER(int, CMD_ARGV[1], options);
-					rvl_du->options = options;
+					rl_du->options = options;
 					LOG_INFO("Option %x is passed to %s debug unit"
-						 , options, rvl_du->name);
+						 , options, rl_du->name);
 				}
 
 				return ERROR_OK;
@@ -1273,14 +1272,14 @@ COMMAND_HANDLER(or1k_du_select_command_handler)
 
 COMMAND_HANDLER(rvl_du_list_command_handler)
 {
-	struct rvl_du *rvl_du;
+	struct rl_du *rl_du;
 
 	if (CMD_ARGC != 0)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	list_for_each_entry(rvl_du, &du_list, list) {
-		if (rvl_du->name)
-			command_print(CMD, "%s", rvl_du->name);
+	list_for_each_entry(rl_du, &du_list, list) {
+		if (rl_du->name)
+			command_print(CMD, "%s", rl_du->name);
 	}
 
 	return ERROR_OK;
@@ -1313,7 +1312,7 @@ COMMAND_HANDLER(rvl_addreg_command_handler)
 	return ERROR_OK;
 }
 
-static const struct command_registration or1k_hw_ip_command_handlers[] = {
+static const struct command_registration rvl_hw_ip_command_handlers[] = {
 	{
 		.name = "tap_select",
 		.handler = rvl_tap_select_command_handler,

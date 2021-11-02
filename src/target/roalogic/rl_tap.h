@@ -23,7 +23,7 @@
 #endif
 
 #include <helper/list.h>
-#include "rlv.h"
+#include "rvl.h"
 
 int rl_tap_vjtag_register(void);
 int rl_universal_tap_register(void);
