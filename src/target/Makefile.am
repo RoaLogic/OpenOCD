@@ -260,3 +260,4 @@ ARC_SRC = \
 
 include %D%/openrisc/Makefile.am
 include %D%/riscv/Makefile.am
+include %D%/roalogic/Makefile.am

@@ -23,7 +23,7 @@
 #endif
 
 #include "rl_tap.h"
-#include "rlv.h"
+#include "rvl.h"
 
 #include <jtag/jtag.h>
 

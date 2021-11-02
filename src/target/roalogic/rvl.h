@@ -27,6 +27,7 @@
 #endif
 
 #include <target/target.h>
+#include <target/riscv/encoding.h>
 
 /* Debug Register Access Groups Start Addresses 
  * INTERNAL = Debug Unit internal registers
@@ -35,7 +36,7 @@
  * */
 #define GROUP_DBG	(0 << 12)
 #define GROUP_GPRS	(1 << 12)
-#define GROUP_CSRS	(2 << 12)
+#define GROUP_CSR 	(2 << 12)
 
 /* Integer Register File
  * Floating Point Register File
@@ -159,22 +160,20 @@ enum gdb_regno {
 const char *gdb_regno_name(enum gdb_regno regno);
 
 
-/* moved to rl_dbg_adv.h
-struct rvl_jtag {
-	struct jtag_tap *tap;
-	int rvl_jtag_inited;
-	int rvl_jtag_module_selected;
+struct rl_jtag {
+	struct  jtag_tap *tap;
+	int     rl_jtag_inited;
+	int     rl_jtag_module_selected;
 	uint8_t *current_reg_idx;
-	struct rl_tap_ip *tap_ip;
-	struct rvl_du *du_core;
-	struct target *target;
+	struct  rl_tap_ip *tap_ip;
+	struct  rl_du *du_core;
+	struct  target *target;
 };
-*/
 
 struct rvl_common {
-	struct   rvl_jtag jtag;
+	struct   rl_jtag jtag;
 	struct   reg_cache *core_cache;
-	uint32_t core_regs[GBD_REGNO_COUNT];
+	uint32_t core_regs[GDB_REGNO_COUNT];
 	int      nb_regs;
 	struct   rvl_core_reg *arch_info;
 };

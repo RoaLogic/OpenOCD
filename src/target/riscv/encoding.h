@@ -1911,6 +1911,7 @@
 #define CSR_DPC 0x7b1
 #define CSR_DSCRATCH0 0x7b2
 #define CSR_DSCRATCH1 0x7b3
+#define CSR_MNMIVEC 0x70C
 #define CSR_MCYCLE 0xb00
 #define CSR_MINSTRET 0xb02
 #define CSR_MHPMCOUNTER3 0xb03

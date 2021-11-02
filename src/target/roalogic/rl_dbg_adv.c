@@ -1,14 +1,8 @@
 /***************************************************************************
- *   Copyright (C) 2013-2014 by Franck Jullien                             *
- *   elec4fun@gmail.com                                                    *
+ *   Copyright (C) 2021 by Richard Herveille                               *
+ *   richard.herveille@roalogic.com                                        *
  *                                                                         *
- *   Inspired from adv_jtag_bridge which is:                               *
- *   Copyright (C) 2008-2010 Nathan Yawn                                   *
- *   nyawn@opencores.net                                                   *
- *                                                                         *
- *   And the Mohor interface version of this file which is:                *
- *   Copyright (C) 2011 by Julius Baxter                                   *
- *   julius@opencores.org                                                  *
+ *   Based on OR1K version                                                 *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -191,7 +185,7 @@ static int rl_adv_jtag_init(struct rl_jtag *jtag_info)
 	jtag_info->current_reg_idx = malloc(DBG_MAX_MODULES * sizeof(uint8_t));
 	memset(jtag_info->current_reg_idx, 0, DBG_MAX_MODULES * sizeof(uint8_t));
 
-	if (rl_dbg_adv.options & ADBG_USE_HISPEED)
+	if (rl_dbg_adv.options & USE_HISPEED)
 		LOG_INFO("Roa Logic adv debug unit is configured with option USE_HISPEED");
 
 	if (rl_dbg_adv.options & ENABLE_JSP_SERVER) {
@@ -590,7 +584,7 @@ retry_read_full:
 
 	/* Now, read the error register, and retry/recompute as necessary */
 	if (jtag_info->rl_jtag_module_selected == DC_SYSBUS &&
-	    !(rl_dbg_adv.options & ADBG_USE_HISPEED)) {
+	    !(rl_dbg_adv.options & USE_HISPEED)) {
 
 		uint32_t err_data[2] = {0, 0};
 		uint32_t addr;
@@ -654,7 +648,7 @@ static int adbg_sysbus_burst_write(struct rl_jtag *jtag_info, const uint8_t *dat
 
 	/* Select the appropriate opcode */
 	switch (jtag_info->rl_jtag_module_selected) {
-	case DC_WISHBONE:
+	case DC_SYSBUS:
 		if (size == 1)
 			opcode = DBG_SYSBUS_CMD_BWRITE8;
 		else if (size == 2)
@@ -744,7 +738,7 @@ retry_full_write:
 
 	/* Now, read the error register, and retry/recompute as necessary */
 	if (jtag_info->rl_jtag_module_selected == DC_SYSBUS &&
-	    !(rl_dbg_adv.options & ADBG_USE_HISPEED)) {
+	    !(rl_dbg_adv.options & USE_HISPEED)) {
 		uint32_t addr;
 		int bus_error_retries = 0;
 		uint32_t err_data[2] = {0, 0};
@@ -817,7 +811,7 @@ static int rl_adv_jtag_write_cpu(struct rl_jtag *jtag_info,
 	if (retval != ERROR_OK)
 		return retval;
 
-	return adbg_sysbus_burst_write(jtag_info, (uint8_t *)value, 4, count, addr);
+	return adbg_sysbusb_burst_write(jtag_info, (uint8_t *)value, 4, count, addr);
 }
 
 static int rl_adv_cpu_stall(struct rl_jtag *jtag_info, int action)
@@ -957,9 +951,9 @@ static int rl_adv_jtag_read_memory(struct rl_jtag *jtag_info,
 	struct target *target = jtag_info->target;
 	if ((target->endianness == TARGET_BIG_ENDIAN) && (size != 1)) {
 		switch (size) {
-		case 8:
-			buf_bswap64(buffer, buffer, size * count);
-			break;
+		// case 8:
+		// 	buf_bswap64(buffer, buffer, size * count);
+		// 	break;
 		case 4:
 			buf_bswap32(buffer, buffer, size * count);
 			break;
@@ -1003,9 +997,9 @@ static int rl_adv_jtag_write_memory(struct rl_jtag *jtag_info,
 		}
 
 		switch (size) {
-		case 8:
-			bus_bswap64(t, buffer, size * count);
-			break;
+		// case 8:
+		// 	bus_bswap64(t, buffer, size * count);
+		// 	break;
 		case 4:
 			buf_bswap32(t, buffer, size * count);
 			break;
@@ -1025,7 +1019,7 @@ static int rl_adv_jtag_write_memory(struct rl_jtag *jtag_info,
 		int blocks_this_round = (block_count_left > MAX_BURST_SIZE) ?
 			MAX_BURST_SIZE : block_count_left;
 
-		retval = adbg_sysbus_burst_write(jtag_info, block_count_buffer,
+		retval = adbg_sysbusb_burst_write(jtag_info, block_count_buffer,
 					         size, blocks_this_round,
 					         block_count_address);
 		if (retval != ERROR_OK) {
