@@ -28,9 +28,9 @@
 #include "config.h"
 #endif
 
-#include "or1k_tap.h"
-#include "or1k.h"
-#include "or1k_du.h"
+#include "rl_tap.h"
+#include "rvl.h"
+#include "rl_dbg_adv.h"
 #include "jsp_server.h"
 
 #include <target/target.h>
@@ -49,7 +49,7 @@
  * reads and writes to improve download speeds.
  * This option must match the RTL configured option.
  */
-#define ADBG_USE_HISPEED		1
+#define USE_HISPEED			1
 
 /* This an option to the adv debug unit.
  * If this is defined, the JTAG Serial Port Server is started.
@@ -66,13 +66,13 @@
  * of a single register, used to select the active debug module ("chain").
  */
 #define DBG_MODULE_SELECT_REG_SIZE	2
-#define DBG_MAX_MODULES			4
+#define DBG_MAX_MODULES			3
 
 #define DC_NONE				-1
-#define DC_WISHBONE			0
-#define DC_CPU0				1
-#define DC_CPU1				2
-#define DC_JSP				3
+#define DC_SYSBUS   			0
+#define DC_CPU				1
+#define DC_JSP				2
+
 
 /* CPU control register bits mask */
 #define DBG_CPU_CR_STALL		0x01
@@ -89,44 +89,35 @@
  * The first is the length of the index register,
  * the indexes of the various registers are defined after that.
  */
-#define DBG_WB_REG_SEL_LEN		1
-#define DBG_WB_REG_ERROR		0
+#define DBG_SYSBUS_REG_SEL_LEN		1
+#define DBG_SYSBUS_REG_ERROR		0
 
 /* Opcode definitions for the Wishbone module. */
-#define DBG_WB_OPCODE_LEN		4
-#define DBG_WB_CMD_NOP			0x0
-#define DBG_WB_CMD_BWRITE8		0x1
-#define DBG_WB_CMD_BWRITE16		0x2
-#define DBG_WB_CMD_BWRITE32		0x3
-#define DBG_WB_CMD_BREAD8		0x5
-#define DBG_WB_CMD_BREAD16		0x6
-#define DBG_WB_CMD_BREAD32		0x7
-#define DBG_WB_CMD_IREG_WR		0x9
-#define DBG_WB_CMD_IREG_SEL		0xd
+#define DBG_SYSBUS_OPCODE_LEN		4
+#define DBG_SYSBUS_CMD_NOP		0x0
+#define DBG_SYSBUS_CMD_BWRITE8		0x1
+#define DBG_SYSBUS_CMD_BWRITE16		0x2
+#define DBG_SYSBUS_CMD_BWRITE32		0x3
+#define DBG_SYSBUS_CMD_BWRITE64		0x4
+#define DBG_SYSBUS_CMD_BREAD8		0x5
+#define DBG_SYSBUS_CMD_BREAD16		0x6
+#define DBG_SYSBUS_CMD_BREAD32		0x7
+#define DBG_SYSBUS_CMD_BREAD64		0x8
+#define DBG_SYSBUS_CMD_IREG_WR		0x9
+#define DBG_SYSBUS_CMD_IREG_SEL		0xd
 
-/* Internal register definitions for the CPU0 module. */
-#define DBG_CPU0_REG_SEL_LEN		1
-#define DBG_CPU0_REG_STATUS		0
+/* Internal register definitions for the CP0 module. */
+#define DBG_CPU_REG_SEL_LEN		1
+#define DBG_CPU_REG_STATUS		0
 
-/* Opcode definitions for the first CPU module. */
-#define DBG_CPU0_OPCODE_LEN		4
-#define DBG_CPU0_CMD_NOP		0x0
-#define DBG_CPU0_CMD_BWRITE32		0x3
-#define DBG_CPU0_CMD_BREAD32		0x7
-#define DBG_CPU0_CMD_IREG_WR		0x9
-#define DBG_CPU0_CMD_IREG_SEL		0xd
+/* Opcode definitions for the CPU module. */
+#define DBG_CPU_OPCODE_LEN		4
+#define DBG_CPU_CMD_NOP			0x0
+#define DBG_CPU_CMD_BWRITE32		0x3
+#define DBG_CPU_CMD_BREAD32		0x7
+#define DBG_CPU_CMD_IREG_WR		0x9
+#define DBG_CPU_CMD_IREG_SEL		0xd
 
-/* Internal register definitions for the CPU1 module. */
-#define DBG_CPU1_REG_SEL_LEN		1
-#define DBG_CPU1_REG_STATUS		0
-
-/* Opcode definitions for the second CPU module. */
-#define DBG_CPU1_OPCODE_LEN		4
-#define DBG_CPU1_CMD_NOP		0x0
-#define DBG_CPU1_CMD_BWRITE32		0x3
-#define DBG_CPU1_CMD_BREAD32		0x7
-#define DBG_CPU1_CMD_IREG_WR		0x9
-#define DBG_CPU1_CMD_IREG_SEL		0xd
 
 #define MAX_READ_STATUS_WAIT		10
 #define MAX_READ_BUSY_RETRY		2
@@ -140,9 +131,9 @@
 #define STATUS_BYTES			1
 #define CRC_LEN				4
 
-static struct or1k_du or1k_du_adv;
+static struct rl_du rl_dbg_adv;
 
-static const char * const chain_name[] = {"WISHBONE", "CPU0", "CPU1", "JSP"};
+static const char * const chain_name[] = {"SYSBUS", "CPU", "JSP"};
 
 static uint32_t adbg_compute_crc(uint32_t crc, uint32_t data_in,
 				 int length_bits)
@@ -178,9 +169,9 @@ static int find_status_bit(void *_buf, int len)
 	return ret;
 }
 
-static int or1k_adv_jtag_init(struct or1k_jtag *jtag_info)
+static int rl_adv_jtag_init(struct rl_jtag *jtag_info)
 {
-	struct or1k_tap_ip *tap_ip = jtag_info->tap_ip;
+	struct rl_tap_ip *tap_ip = jtag_info->tap_ip;
 
 	int retval = tap_ip->init(jtag_info);
 	if (retval != ERROR_OK) {
@@ -189,21 +180,21 @@ static int or1k_adv_jtag_init(struct or1k_jtag *jtag_info)
 	}
 
 	/* TAP is now configured to communicate with debug interface */
-	jtag_info->or1k_jtag_inited = 1;
+	jtag_info->rl_jtag_inited = 1;
 
 	/* TAP reset - not sure what state debug module chain is in now */
-	jtag_info->or1k_jtag_module_selected = DC_NONE;
+	jtag_info->rl_jtag_module_selected = DC_NONE;
 
 	jtag_info->current_reg_idx = malloc(DBG_MAX_MODULES * sizeof(uint8_t));
 	memset(jtag_info->current_reg_idx, 0, DBG_MAX_MODULES * sizeof(uint8_t));
 
-	if (or1k_du_adv.options & ADBG_USE_HISPEED)
-		LOG_INFO("adv debug unit is configured with option ADBG_USE_HISPEED");
+	if (rl_dbg_adv.options & ADBG_USE_HISPEED)
+		LOG_INFO("Roa Logic adv debug unit is configured with option USE_HISPEED");
 
-	if (or1k_du_adv.options & ENABLE_JSP_SERVER) {
-		if (or1k_du_adv.options & ENABLE_JSP_MULTI)
-			LOG_INFO("adv debug unit is configured with option ENABLE_JSP_MULTI");
-		LOG_INFO("adv debug unit is configured with option ENABLE_JSP_SERVER");
+	if (rl_dbg_adv.options & ENABLE_JSP_SERVER) {
+		if (rl_dbg_adv.options & ENABLE_JSP_MULTI)
+			LOG_INFO("Roa Logic adv debug unit is configured with option ENABLE_JSP_MULTI");
+		LOG_INFO("Roa Logic adv debug unit is configured with option ENABLE_JSP_SERVER");
 		retval = jsp_init(jtag_info, JSP_BANNER);
 		if (retval != ERROR_OK) {
 			LOG_ERROR("Couldn't start the JSP server");
@@ -218,11 +209,11 @@ static int or1k_adv_jtag_init(struct or1k_jtag *jtag_info)
 }
 
 /* Selects one of the modules in the debug unit
- * (e.g. wishbone unit, CPU0, etc.)
+ * (e.g. SYSBUS, CPU, JSP)
  */
-static int adbg_select_module(struct or1k_jtag *jtag_info, int chain)
+static int adbg_select_module(struct rl_jtag *jtag_info, int chain)
 {
-	if (jtag_info->or1k_jtag_module_selected == chain)
+	if (jtag_info->rl_jtag_module_selected == chain)
 		return ERROR_OK;
 
 	/* MSB of the data out must be set to 1, indicating a module
@@ -243,7 +234,7 @@ static int adbg_select_module(struct or1k_jtag *jtag_info, int chain)
 	if (retval != ERROR_OK)
 		return retval;
 
-	jtag_info->or1k_jtag_module_selected = chain;
+	jtag_info->rl_jtag_module_selected = chain;
 
 	return ERROR_OK;
 }
@@ -253,35 +244,30 @@ static int adbg_select_module(struct or1k_jtag *jtag_info, int chain)
  * 4 bits opcode
  * n bits index
  */
-static int adbg_select_ctrl_reg(struct or1k_jtag *jtag_info, uint8_t regidx)
+static int adbg_select_ctrl_reg(struct rl_jtag *jtag_info, uint8_t regidx)
 {
 	int index_len;
 	uint32_t opcode;
 	uint32_t opcode_len;
 
 	/* If this reg is already selected, don't do a JTAG transaction */
-	if (jtag_info->current_reg_idx[jtag_info->or1k_jtag_module_selected] == regidx)
+	if (jtag_info->current_reg_idx[jtag_info->rl_jtag_module_selected] == regidx)
 		return ERROR_OK;
 
-	switch (jtag_info->or1k_jtag_module_selected) {
-	case DC_WISHBONE:
-		index_len = DBG_WB_REG_SEL_LEN;
-		opcode = DBG_WB_CMD_IREG_SEL;
-		opcode_len = DBG_WB_OPCODE_LEN;
+	switch (jtag_info->rl_jtag_module_selected) {
+	case DC_SYSBUS:
+		index_len  = DBG_SYSBUS_REG_SEL_LEN;
+		opcode     = DBG_SYSBUS_CMD_IREG_SEL;
+		opcode_len = DBG_SYSBUS_OPCODE_LEN;
 		break;
-	case DC_CPU0:
-		index_len = DBG_CPU0_REG_SEL_LEN;
-		opcode = DBG_CPU0_CMD_IREG_SEL;
-		opcode_len = DBG_CPU0_OPCODE_LEN;
-		break;
-	case DC_CPU1:
-		index_len = DBG_CPU1_REG_SEL_LEN;
-		opcode = DBG_CPU1_CMD_IREG_SEL;
-		opcode_len = DBG_CPU1_OPCODE_LEN;
+	case DC_CPU:
+		index_len  = DBG_CPU_REG_SEL_LEN;
+		opcode     = DBG_CPU_CMD_IREG_SEL;
+		opcode_len = DBG_CPU_OPCODE_LEN;
 		break;
 	default:
 		LOG_ERROR("Illegal debug chain selected (%i) while selecting control register",
-			  jtag_info->or1k_jtag_module_selected);
+			  jtag_info->rl_jtag_module_selected);
 		return ERROR_FAIL;
 	}
 
@@ -300,13 +286,13 @@ static int adbg_select_ctrl_reg(struct or1k_jtag *jtag_info, uint8_t regidx)
 	if (retval != ERROR_OK)
 		return retval;
 
-	jtag_info->current_reg_idx[jtag_info->or1k_jtag_module_selected] = regidx;
+	jtag_info->current_reg_idx[jtag_info->rl_jtag_module_selected] = regidx;
 
 	return ERROR_OK;
 }
 
 /* Write control register (internal to the debug unit) */
-static int adbg_ctrl_write(struct or1k_jtag *jtag_info, uint8_t regidx,
+static int adbg_ctrl_write(struct rl_jtag *jtag_info, uint8_t regidx,
 			   uint32_t *cmd_data, int length_bits)
 {
 	int index_len;
@@ -321,21 +307,16 @@ static int adbg_ctrl_write(struct or1k_jtag *jtag_info, uint8_t regidx,
 		return retval;
 	}
 
-	switch (jtag_info->or1k_jtag_module_selected) {
-	case DC_WISHBONE:
-		index_len = DBG_WB_REG_SEL_LEN;
-		opcode = DBG_WB_CMD_IREG_WR;
-		opcode_len = DBG_WB_OPCODE_LEN;
+	switch (jtag_info->rl_jtag_module_selected) {
+	case DC_SYSBUS:
+		index_len  = DBG_SYSBUS_REG_SEL_LEN;
+		opcode     = DBG_SYSBUS_CMD_IREG_WR;
+		opcode_len = DBG_SYSBUS_OPCODE_LEN;
 		break;
-	case DC_CPU0:
-		index_len = DBG_CPU0_REG_SEL_LEN;
-		opcode = DBG_CPU0_CMD_IREG_WR;
-		opcode_len = DBG_CPU0_OPCODE_LEN;
-		break;
-	case DC_CPU1:
-		index_len = DBG_CPU1_REG_SEL_LEN;
-		opcode = DBG_CPU1_CMD_IREG_WR;
-		opcode_len = DBG_CPU1_OPCODE_LEN;
+	case DC_CPU:
+		index_len  = DBG_CPU_REG_SEL_LEN;
+		opcode     = DBG_CPU_CMD_IREG_WR;
+		opcode_len = DBG_CPU_OPCODE_LEN;
 		break;
 	default:
 		LOG_ERROR("Illegal debug chain selected (%i) while doing control write",
@@ -349,13 +330,13 @@ static int adbg_ctrl_write(struct or1k_jtag *jtag_info, uint8_t regidx,
 	uint32_t data = (opcode & ~(1 << opcode_len)) << index_len;
 	data |= regidx;
 
-	field[0].num_bits = length_bits;
+	field[0].num_bits  = length_bits;
 	field[0].out_value = (uint8_t *)cmd_data;
-	field[0].in_value = NULL;
+	field[0].in_value  = NULL;
 
-	field[1].num_bits = (opcode_len + 1) + index_len;
+	field[1].num_bits  = (opcode_len + 1) + index_len;
 	field[1].out_value = (uint8_t *)&data;
-	field[1].in_value = NULL;
+	field[1].in_value  = NULL;
 
 	jtag_add_dr_scan(jtag_info->tap, 2, field, TAP_IDLE);
 
@@ -363,7 +344,7 @@ static int adbg_ctrl_write(struct or1k_jtag *jtag_info, uint8_t regidx,
 }
 
 /* Reads control register (internal to the debug unit) */
-static int adbg_ctrl_read(struct or1k_jtag *jtag_info, uint32_t regidx,
+static int adbg_ctrl_read(struct rl_jtag *jtag_info, uint32_t regidx,
 			  uint32_t *data, int length_bits)
 {
 
@@ -377,18 +358,14 @@ static int adbg_ctrl_read(struct or1k_jtag *jtag_info, uint32_t regidx,
 	uint32_t opcode;
 
 	/* There is no 'read' command, We write a NOP to read */
-	switch (jtag_info->or1k_jtag_module_selected) {
-	case DC_WISHBONE:
-		opcode = DBG_WB_CMD_NOP;
-		opcode_len = DBG_WB_OPCODE_LEN;
+	switch (jtag_info->rl_jtag_module_selected) {
+	case DC_SYSBUS:
+		opcode     = DBG_SYSBUS_CMD_NOP;
+		opcode_len = DBG_SYSBUS_OPCODE_LEN;
 		break;
-	case DC_CPU0:
-		opcode = DBG_CPU0_CMD_NOP;
-		opcode_len = DBG_CPU0_OPCODE_LEN;
-		break;
-	case DC_CPU1:
-		opcode = DBG_CPU1_CMD_NOP;
-		opcode_len = DBG_CPU1_OPCODE_LEN;
+	case DC_CPU:
+		opcode     = DBG_CPU_CMD_NOP;
+		opcode_len = DBG_CPU_OPCODE_LEN;
 		break;
 	default:
 		LOG_ERROR("Illegal debug chain selected (%i) while doing control read",
@@ -401,13 +378,13 @@ static int adbg_ctrl_read(struct or1k_jtag *jtag_info, uint32_t regidx,
 
 	struct scan_field field[2];
 
-	field[0].num_bits = length_bits;
+	field[0].num_bits  = length_bits;
 	field[0].out_value = NULL;
-	field[0].in_value = (uint8_t *)data;
+	field[0].in_value  = (uint8_t *)data;
 
-	field[1].num_bits = opcode_len + 1;
+	field[1].num_bits  = opcode_len + 1;
 	field[1].out_value = (uint8_t *)&outdata;
-	field[1].in_value = NULL;
+	field[1].in_value  = NULL;
 
 	jtag_add_dr_scan(jtag_info->tap, 2, field, TAP_IDLE);
 
@@ -420,7 +397,7 @@ static int adbg_ctrl_read(struct or1k_jtag *jtag_info, uint32_t regidx,
  * 32-bit address
  * 16-bit length (of the burst, in words)
  */
-static int adbg_burst_command(struct or1k_jtag *jtag_info, uint32_t opcode,
+static int adbg_burst_command(struct rl_jtag *jtag_info, uint32_t opcode,
 			      uint32_t address, uint16_t length_words)
 {
 	uint32_t data[2];
@@ -432,17 +409,17 @@ static int adbg_burst_command(struct or1k_jtag *jtag_info, uint32_t opcode,
 
 	struct scan_field field;
 
-	field.num_bits = 53;
+	field.num_bits  = 53;
 	field.out_value = (uint8_t *)&data[0];
-	field.in_value = NULL;
+	field.in_value  = NULL;
 
 	jtag_add_dr_scan(jtag_info->tap, 1, &field, TAP_IDLE);
 
 	return jtag_execute_queue();
 }
 
-static int adbg_wb_burst_read(struct or1k_jtag *jtag_info, int size,
-			      int count, uint32_t start_address, uint8_t *data)
+static int adbg_sysbus_burst_read(struct rl_jtag *jtag_info, int size,
+			          int count, uint32_t start_address, uint8_t *data)
 {
 	int retry_full_crc = 0;
 	int retry_full_busy = 0;
@@ -453,41 +430,34 @@ static int adbg_wb_burst_read(struct or1k_jtag *jtag_info, int size,
 		  size, count, start_address);
 
 	/* Select the appropriate opcode */
-	switch (jtag_info->or1k_jtag_module_selected) {
-	case DC_WISHBONE:
+	switch (jtag_info->rl_jtag_module_selected) {
+	case DC_SYSBUS:
 		if (size == 1)
-			opcode = DBG_WB_CMD_BREAD8;
+			opcode = DBG_SYSBUS_CMD_BREAD8;
 		else if (size == 2)
-			opcode = DBG_WB_CMD_BREAD16;
+			opcode = DBG_SYSBUS_CMD_BREAD16;
 		else if (size == 4)
-			opcode = DBG_WB_CMD_BREAD32;
+			opcode = DBG_SYSBUS_CMD_BREAD32;
+		else if (size == 8)
+			opcode = DBG_SYSBUS_CMD_BREAD64;
 		else {
 			LOG_WARNING("Tried burst read with invalid word size (%d),"
 				  "defaulting to 4-byte words", size);
-			opcode = DBG_WB_CMD_BREAD32;
+			opcode = DBG_SYSBUS_CMD_BREAD32;
 		}
 		break;
-	case DC_CPU0:
+	case DC_CPU:
 		if (size == 4)
-			opcode = DBG_CPU0_CMD_BREAD32;
+			opcode = DBG_CPU_CMD_BREAD32;
 		else {
 			LOG_WARNING("Tried burst read with invalid word size (%d),"
 				  "defaulting to 4-byte words", size);
-			opcode = DBG_CPU0_CMD_BREAD32;
-		}
-		break;
-	case DC_CPU1:
-		if (size == 4)
-			opcode = DBG_CPU1_CMD_BREAD32;
-		else {
-			LOG_WARNING("Tried burst read with invalid word size (%d),"
-				  "defaulting to 4-byte words", size);
-			opcode = DBG_CPU0_CMD_BREAD32;
+			opcode = DBG_CPU_CMD_BREAD32;
 		}
 		break;
 	default:
 		LOG_ERROR("Illegal debug chain selected (%i) while doing burst read",
-			  jtag_info->or1k_jtag_module_selected);
+			  jtag_info->rl_jtag_module_selected);
 		return ERROR_FAIL;
 	}
 
@@ -550,39 +520,39 @@ retry_read_full:
 		LOG_DEBUG("CRC OK!");
 
 	/* Now, read the error register, and retry/recompute as necessary */
-	if (jtag_info->or1k_jtag_module_selected == DC_WISHBONE &&
-	    !(or1k_du_adv.options & ADBG_USE_HISPEED)) {
+	if (jtag_info->rl_jtag_module_selected == DC_SYSBUS &&
+	    !(rl_dbg_adv.options & ADBG_USE_HISPEED)) {
 
 		uint32_t err_data[2] = {0, 0};
 		uint32_t addr;
 		int bus_error_retries = 0;
 
 		/* First, just get 1 bit...read address only if necessary */
-		retval = adbg_ctrl_read(jtag_info, DBG_WB_REG_ERROR, err_data, 1);
+		retval = adbg_ctrl_read(jtag_info, DBG_SYSBUS_REG_ERROR, err_data, 1);
 		if (retval != ERROR_OK)
 			goto out;
 
 		/* Then we have a problem */
 		if (err_data[0] & 0x1) {
 
-			retval = adbg_ctrl_read(jtag_info, DBG_WB_REG_ERROR, err_data, 33);
+			retval = adbg_ctrl_read(jtag_info, DBG_SYSBUS_REG_ERROR, err_data, 33);
 			if (retval != ERROR_OK)
 				goto out;
 
 			addr = (err_data[0] >> 1) | (err_data[1] << 31);
-			LOG_WARNING("WB bus error during burst read, address 0x%08" PRIx32 ", retrying!", addr);
+			LOG_WARNING("SYSBUS bus error during burst read, address 0x%08" PRIx32 ", retrying!", addr);
 
 			bus_error_retries++;
 			if (bus_error_retries > MAX_BUS_ERRORS) {
-				LOG_ERROR("Max WB bus errors reached during burst read");
+				LOG_ERROR("Max SYSBUS bus errors reached during burst read");
 				retval = ERROR_FAIL;
 				goto out;
 			}
 
-			/* Don't call retry_do(), a JTAG reset won't help a WB bus error */
+			/* Don't call retry_do(), a JTAG reset won't help a SYSBUS bus error */
 			/* Write 1 bit, to reset the error register */
 			err_data[0] = 1;
-			retval = adbg_ctrl_write(jtag_info, DBG_WB_REG_ERROR, err_data, 1);
+			retval = adbg_ctrl_write(jtag_info, DBG_SYSBUS_REG_ERROR, err_data, 1);
 			if (retval != ERROR_OK)
 				goto out;
 
@@ -597,8 +567,8 @@ out:
 }
 
 /* Set up and execute a burst write to a contiguous set of addresses */
-static int adbg_wb_burst_write(struct or1k_jtag *jtag_info, const uint8_t *data, int size,
-			int count, unsigned long start_address)
+static int adbg_sysbusb_burst_write(struct rl_jtag *jtag_info, const uint8_t *data, int size,
+				    int count, unsigned long start_address)
 {
 	int retry_full_crc = 0;
 	int retval;
@@ -611,38 +581,31 @@ static int adbg_wb_burst_write(struct or1k_jtag *jtag_info, const uint8_t *data,
 	switch (jtag_info->or1k_jtag_module_selected) {
 	case DC_WISHBONE:
 		if (size == 1)
-			opcode = DBG_WB_CMD_BWRITE8;
+			opcode = DBG_SYSBUS_CMD_BWRITE8;
 		else if (size == 2)
-			opcode = DBG_WB_CMD_BWRITE16;
+			opcode = DBG_SYSBUS_CMD_BWRITE16;
 		else if (size == 4)
-			opcode = DBG_WB_CMD_BWRITE32;
+			opcode = DBG_SYSBUS_CMD_BWRITE32;
+		else if (size == 8)
+			opcode = DBG_SYSBUS_CMD_BWRITE64;
 		else {
-			LOG_DEBUG("Tried WB burst write with invalid word size (%d),"
+			LOG_DEBUG("Tried SYSBUS burst write with invalid word size (%d),"
 				  "defaulting to 4-byte words", size);
-			opcode = DBG_WB_CMD_BWRITE32;
+			opcode = DBG_SYSBUS_CMD_BWRITE32;
 		}
 		break;
-	case DC_CPU0:
+	case DC_CPU:
 		if (size == 4)
-			opcode = DBG_CPU0_CMD_BWRITE32;
+			opcode = DBG_CPU_CMD_BWRITE32;
 		else {
-			LOG_DEBUG("Tried CPU0 burst write with invalid word size (%d),"
+			LOG_DEBUG("Tried CPU burst write with invalid word size (%d),"
 				  "defaulting to 4-byte words", size);
-			opcode = DBG_CPU0_CMD_BWRITE32;
-		}
-		break;
-	case DC_CPU1:
-		if (size == 4)
-			opcode = DBG_CPU1_CMD_BWRITE32;
-		else {
-			LOG_DEBUG("Tried CPU1 burst write with invalid word size (%d),"
-				  "defaulting to 4-byte words", size);
-			opcode = DBG_CPU0_CMD_BWRITE32;
+			opcode = DBG_CPU_CMD_BWRITE32;
 		}
 		break;
 	default:
 		LOG_ERROR("Illegal debug chain selected (%i) while doing burst write",
-			  jtag_info->or1k_jtag_module_selected);
+			  jtag_info->rl_jtag_module_selected);
 		return ERROR_FAIL;
 	}
 
@@ -695,38 +658,38 @@ retry_full_write:
 		LOG_DEBUG("CRC OK!\n");
 
 	/* Now, read the error register, and retry/recompute as necessary */
-	if (jtag_info->or1k_jtag_module_selected == DC_WISHBONE &&
-	    !(or1k_du_adv.options & ADBG_USE_HISPEED)) {
+	if (jtag_info->rl_jtag_module_selected == DC_SYSBUS &&
+	    !(rl_dbg_adv.options & ADBG_USE_HISPEED)) {
 		uint32_t addr;
 		int bus_error_retries = 0;
 		uint32_t err_data[2] = {0, 0};
 
 		/* First, just get 1 bit...read address only if necessary */
-		retval = adbg_ctrl_read(jtag_info, DBG_WB_REG_ERROR, err_data, 1);
+		retval = adbg_ctrl_read(jtag_info, DBG_SYSBUS_REG_ERROR, err_data, 1);
 		if (retval != ERROR_OK)
 			return retval;
 
 		/* Then we have a problem */
 		if (err_data[0] & 0x1) {
 
-			retval = adbg_ctrl_read(jtag_info, DBG_WB_REG_ERROR, err_data, 33);
+			retval = adbg_ctrl_read(jtag_info, DBG_SYSBUS_REG_ERROR, err_data, 33);
 			if (retval != ERROR_OK)
 				return retval;
 
 			addr = (err_data[0] >> 1) | (err_data[1] << 31);
-			LOG_WARNING("WB bus error during burst write, address 0x%08" PRIx32 ", retrying!", addr);
+			LOG_WARNING("SYSBUS bus error during burst write, address 0x%08" PRIx32 ", retrying!", addr);
 
 			bus_error_retries++;
 			if (bus_error_retries > MAX_BUS_ERRORS) {
-				LOG_ERROR("Max WB bus errors reached during burst read");
+				LOG_ERROR("Max SYSBUS bus errors reached during burst read");
 				retval = ERROR_FAIL;
 				return retval;
 			}
 
-			/* Don't call retry_do(), a JTAG reset won't help a WB bus error */
+			/* Don't call retry_do(), a JTAG reset won't help a SYSBUS bus error */
 			/* Write 1 bit, to reset the error register */
 			err_data[0] = 1;
-			retval = adbg_ctrl_write(jtag_info, DBG_WB_REG_ERROR, err_data, 1);
+			retval = adbg_ctrl_write(jtag_info, DBG_SYSBUS_REG_ERROR, err_data, 1);
 			if (retval != ERROR_OK)
 				return retval;
 
@@ -738,55 +701,55 @@ retry_full_write:
 }
 
 /* Currently hard set in functions to 32-bits */
-static int or1k_adv_jtag_read_cpu(struct or1k_jtag *jtag_info,
+static int rl_adv_jtag_read_cpu(struct rl_jtag *jtag_info,
 		uint32_t addr, int count, uint32_t *value)
 {
 	int retval;
-	if (!jtag_info->or1k_jtag_inited) {
-		retval = or1k_adv_jtag_init(jtag_info);
+	if (!jtag_info->rl_jtag_inited) {
+		retval = rl_adv_jtag_init(jtag_info);
 		if (retval != ERROR_OK)
 			return retval;
 	}
 
-	retval = adbg_select_module(jtag_info, DC_CPU0);
+	retval = adbg_select_module(jtag_info, DC_CPU);
 	if (retval != ERROR_OK)
 		return retval;
 
-	return adbg_wb_burst_read(jtag_info, 4, count, addr, (uint8_t *)value);
+	return adbg_sysbus_burst_read(jtag_info, 4, count, addr, (uint8_t *)value);
 }
 
-static int or1k_adv_jtag_write_cpu(struct or1k_jtag *jtag_info,
+static int rl_adv_jtag_write_cpu(struct rl_jtag *jtag_info,
 		uint32_t addr, int count, const uint32_t *value)
 {
 	int retval;
-	if (!jtag_info->or1k_jtag_inited) {
-		retval = or1k_adv_jtag_init(jtag_info);
+	if (!jtag_info->rl_jtag_inited) {
+		retval = rl_adv_jtag_init(jtag_info);
 		if (retval != ERROR_OK)
 			return retval;
 	}
 
-	retval = adbg_select_module(jtag_info, DC_CPU0);
+	retval = adbg_select_module(jtag_info, DC_CPU);
 	if (retval != ERROR_OK)
 		return retval;
 
-	return adbg_wb_burst_write(jtag_info, (uint8_t *)value, 4, count, addr);
+	return adbg_sysbus_burst_write(jtag_info, (uint8_t *)value, 4, count, addr);
 }
 
-static int or1k_adv_cpu_stall(struct or1k_jtag *jtag_info, int action)
+static int rl_adv_cpu_stall(struct rl_jtag *jtag_info, int action)
 {
 	int retval;
-	if (!jtag_info->or1k_jtag_inited) {
-		retval = or1k_adv_jtag_init(jtag_info);
+	if (!jtag_info->rl_jtag_inited) {
+		retval = rl_adv_jtag_init(jtag_info);
 		if (retval != ERROR_OK)
 			return retval;
 	}
 
-	retval = adbg_select_module(jtag_info, DC_CPU0);
+	retval = adbg_select_module(jtag_info, DC_CPU);
 	if (retval != ERROR_OK)
 		return retval;
 
 	uint32_t cpu_cr;
-	retval = adbg_ctrl_read(jtag_info, DBG_CPU0_REG_STATUS, &cpu_cr, 2);
+	retval = adbg_ctrl_read(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 2);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -795,30 +758,30 @@ static int or1k_adv_cpu_stall(struct or1k_jtag *jtag_info, int action)
 	else
 		cpu_cr &= ~DBG_CPU_CR_STALL;
 
-	retval = adbg_select_module(jtag_info, DC_CPU0);
+	retval = adbg_select_module(jtag_info, DC_CPU);
 	if (retval != ERROR_OK)
 		return retval;
 
-	return adbg_ctrl_write(jtag_info, DBG_CPU0_REG_STATUS, &cpu_cr, 2);
+	return adbg_ctrl_write(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 2);
 }
 
-static int or1k_adv_is_cpu_running(struct or1k_jtag *jtag_info, int *running)
+static int rl_adv_is_cpu_running(struct rl_jtag *jtag_info, int *running)
 {
 	int retval;
-	if (!jtag_info->or1k_jtag_inited) {
-		retval = or1k_adv_jtag_init(jtag_info);
+	if (!jtag_info->rl_jtag_inited) {
+		retval = rl_adv_jtag_init(jtag_info);
 		if (retval != ERROR_OK)
 			return retval;
 	}
 
-	int current = jtag_info->or1k_jtag_module_selected;
+	int current = jtag_info->rl_jtag_module_selected;
 
-	retval = adbg_select_module(jtag_info, DC_CPU0);
+	retval = adbg_select_module(jtag_info, DC_CPU);
 	if (retval != ERROR_OK)
 		return retval;
 
 	uint32_t cpu_cr = 0;
-	retval = adbg_ctrl_read(jtag_info, DBG_CPU0_REG_STATUS, &cpu_cr, 2);
+	retval = adbg_ctrl_read(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 2);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -836,21 +799,21 @@ static int or1k_adv_is_cpu_running(struct or1k_jtag *jtag_info, int *running)
 	return ERROR_OK;
 }
 
-static int or1k_adv_cpu_reset(struct or1k_jtag *jtag_info, int action)
+static int rl_adv_cpu_reset(struct rl_jtag *jtag_info, int action)
 {
 	int retval;
-	if (!jtag_info->or1k_jtag_inited) {
-		retval = or1k_adv_jtag_init(jtag_info);
+	if (!jtag_info->rl_jtag_inited) {
+		retval = rl_adv_jtag_init(jtag_info);
 		if (retval != ERROR_OK)
 			return retval;
 	}
 
-	retval = adbg_select_module(jtag_info, DC_CPU0);
+	retval = adbg_select_module(jtag_info, DC_CPU);
 	if (retval != ERROR_OK)
 		return retval;
 
 	uint32_t cpu_cr;
-	retval = adbg_ctrl_read(jtag_info, DBG_CPU0_REG_STATUS, &cpu_cr, 2);
+	retval = adbg_ctrl_read(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 2);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -859,26 +822,26 @@ static int or1k_adv_cpu_reset(struct or1k_jtag *jtag_info, int action)
 	else
 		cpu_cr &= ~DBG_CPU_CR_RESET;
 
-	retval = adbg_select_module(jtag_info, DC_CPU0);
+	retval = adbg_select_module(jtag_info, DC_CPU);
 	if (retval != ERROR_OK)
 		return retval;
 
-	return adbg_ctrl_write(jtag_info, DBG_CPU0_REG_STATUS, &cpu_cr, 2);
+	return adbg_ctrl_write(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 2);
 }
 
-static int or1k_adv_jtag_read_memory(struct or1k_jtag *jtag_info,
+static int rl_adv_jtag_read_memory(struct rl_jtag *jtag_info,
 			    uint32_t addr, uint32_t size, int count, uint8_t *buffer)
 {
-	LOG_DEBUG("Reading WB%" PRIu32 " at 0x%08" PRIx32, size * 8, addr);
+	LOG_DEBUG("Reading SYSBUS%" PRIu32 " at 0x%08" PRIx32, size * 8, addr);
 
 	int retval;
-	if (!jtag_info->or1k_jtag_inited) {
-		retval = or1k_adv_jtag_init(jtag_info);
+	if (!jtag_info->rl_jtag_inited) {
+		retval = rl_adv_jtag_init(jtag_info);
 		if (retval != ERROR_OK)
 			return retval;
 	}
 
-	retval = adbg_select_module(jtag_info, DC_WISHBONE);
+	retval = adbg_select_module(jtag_info, DC_SYSBUS);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -891,14 +854,14 @@ static int or1k_adv_jtag_read_memory(struct or1k_jtag *jtag_info,
 		int blocks_this_round = (block_count_left > MAX_BURST_SIZE) ?
 			MAX_BURST_SIZE : block_count_left;
 
-		retval = adbg_wb_burst_read(jtag_info, size, blocks_this_round,
-					    block_count_address, block_count_buffer);
+		retval = adbg_sysbus_burst_read(jtag_info, size, blocks_this_round,
+				 	        block_count_address, block_count_buffer);
 		if (retval != ERROR_OK)
 			return retval;
 
-		block_count_left -= blocks_this_round;
+		block_count_left    -= blocks_this_round;
 		block_count_address += size * MAX_BURST_SIZE;
-		block_count_buffer += size * MAX_BURST_SIZE;
+		block_count_buffer  += size * MAX_BURST_SIZE;
 	}
 
 	/* The adv_debug_if always return words and half words in
@@ -909,6 +872,9 @@ static int or1k_adv_jtag_read_memory(struct or1k_jtag *jtag_info,
 	struct target *target = jtag_info->target;
 	if ((target->endianness == TARGET_BIG_ENDIAN) && (size != 1)) {
 		switch (size) {
+		case 8:
+			buf_bswap64(buffer, buffer, size * count);
+			break;
 		case 4:
 			buf_bswap32(buffer, buffer, size * count);
 			break;
@@ -921,19 +887,19 @@ static int or1k_adv_jtag_read_memory(struct or1k_jtag *jtag_info,
 	return ERROR_OK;
 }
 
-static int or1k_adv_jtag_write_memory(struct or1k_jtag *jtag_info,
+static int rl_adv_jtag_write_memory(struct rl_jtag *jtag_info,
 			     uint32_t addr, uint32_t size, int count, const uint8_t *buffer)
 {
-	LOG_DEBUG("Writing WB%" PRIu32 " at 0x%08" PRIx32, size * 8, addr);
+	LOG_DEBUG("Writing SYSBUS%" PRIu32 " at 0x%08" PRIx32, size * 8, addr);
 
 	int retval;
-	if (!jtag_info->or1k_jtag_inited) {
-		retval = or1k_adv_jtag_init(jtag_info);
+	if (!jtag_info->rl_jtag_inited) {
+		retval = rl_adv_jtag_init(jtag_info);
 		if (retval != ERROR_OK)
 			return retval;
 	}
 
-	retval = adbg_select_module(jtag_info, DC_WISHBONE);
+	retval = adbg_select_module(jtag_info, DC_SYSBUS);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -952,6 +918,9 @@ static int or1k_adv_jtag_write_memory(struct or1k_jtag *jtag_info,
 		}
 
 		switch (size) {
+		case 8:
+			bus_bswap64(t, buffer, size * count);
+			break;
 		case 4:
 			buf_bswap32(t, buffer, size * count);
 			break;
@@ -971,31 +940,31 @@ static int or1k_adv_jtag_write_memory(struct or1k_jtag *jtag_info,
 		int blocks_this_round = (block_count_left > MAX_BURST_SIZE) ?
 			MAX_BURST_SIZE : block_count_left;
 
-		retval = adbg_wb_burst_write(jtag_info, block_count_buffer,
-					     size, blocks_this_round,
-					     block_count_address);
+		retval = adbg_sysbus_burst_write(jtag_info, block_count_buffer,
+					         size, blocks_this_round,
+					         block_count_address);
 		if (retval != ERROR_OK) {
 			free(t);
 			return retval;
 		}
 
-		block_count_left -= blocks_this_round;
+		block_count_left    -= blocks_this_round;
 		block_count_address += size * MAX_BURST_SIZE;
-		block_count_buffer += size * MAX_BURST_SIZE;
+		block_count_buffer  += size * MAX_BURST_SIZE;
 	}
 
 	free(t);
 	return ERROR_OK;
 }
 
-int or1k_adv_jtag_jsp_xfer(struct or1k_jtag *jtag_info,
+int rl_adv_jtag_jsp_xfer(struct rl_jtag *jtag_info,
 				  int *out_len, unsigned char *out_buffer,
 				  int *in_len, unsigned char *in_buffer)
 {
 	LOG_DEBUG("JSP transfer");
 
 	int retval;
-	if (!jtag_info->or1k_jtag_inited)
+	if (!jtag_info->rl_jtag_inited)
 		return ERROR_OK;
 
 	retval = adbg_select_module(jtag_info, DC_JSP);
@@ -1016,7 +985,7 @@ int or1k_adv_jtag_jsp_xfer(struct or1k_jtag *jtag_info,
 
 	memset(out_data, 0, 10);
 
-	if (or1k_du_adv.options & ENABLE_JSP_MULTI) {
+	if (rl_dbg_adv.options & ENABLE_JSP_MULTI) {
 
 		startbit = 1;
 		wrapbit = (xmitsize >> 3) & 0x1;
@@ -1072,24 +1041,24 @@ int or1k_adv_jtag_jsp_xfer(struct or1k_jtag *jtag_info,
 	return ERROR_OK;
 }
 
-static struct or1k_du or1k_du_adv = {
-	.name                     = "adv",
-	.options                  = NO_OPTION,
-	.or1k_jtag_init           = or1k_adv_jtag_init,
+static struct rl_du rl_dbg_adv = {
+	.name                   = "Roa Logic Advanced Debug",
+	.options                = NO_OPTION,
+	.rl_jtag_init           = rl_adv_jtag_init,
 
-	.or1k_is_cpu_running      = or1k_adv_is_cpu_running,
-	.or1k_cpu_stall           = or1k_adv_cpu_stall,
-	.or1k_cpu_reset           = or1k_adv_cpu_reset,
+	.rl_is_cpu_running      = rl_adv_is_cpu_running,
+	.rl_cpu_stall           = rl_adv_cpu_stall,
+	.rl_cpu_reset           = rl_adv_cpu_reset,
 
-	.or1k_jtag_read_cpu       = or1k_adv_jtag_read_cpu,
-	.or1k_jtag_write_cpu      = or1k_adv_jtag_write_cpu,
+	.rl_jtag_read_cpu       = rl_adv_jtag_read_cpu,
+	.rl_jtag_write_cpu      = rl_adv_jtag_write_cpu,
 
-	.or1k_jtag_read_memory    = or1k_adv_jtag_read_memory,
-	.or1k_jtag_write_memory   = or1k_adv_jtag_write_memory
+	.rl_jtag_read_memory    = rl_adv_jtag_read_memory,
+	.rl_jtag_write_memory   = rl_adv_jtag_write_memory
 };
 
-int or1k_du_adv_register(void)
+int rl_dbg_adv_register(void)
 {
-	list_add_tail(&or1k_du_adv.list, &du_list);
+	list_add_tail(&rl_dbg_adv.list, &du_list);
 	return 0;
 }
