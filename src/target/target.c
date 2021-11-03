@@ -110,6 +110,7 @@ extern struct target_type stm8_target;
 extern struct target_type riscv_target;
 extern struct target_type mem_ap_target;
 extern struct target_type esirisc_target;
+extern struct target_type rvl_target;
 extern struct target_type arcv2_target;
 
 static struct target_type *target_types[] = {
@@ -148,7 +149,8 @@ static struct target_type *target_types[] = {
 	&esirisc_target,
 	&arcv2_target,
 	&aarch64_target,
-	&mips_mips64_target,
+    &rvl_target,
+	&mips_mips64_target,    
 	NULL,
 };
 

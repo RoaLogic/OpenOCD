@@ -1367,7 +1367,7 @@ static const struct command_registration rvl_command_handlers[] = {
 
 
 struct target_type rvl_target = {
-	.name = "or1k",
+	.name = "rvl",
 
 	.poll = rvl_poll,
 	.arch_state = rvl_arch_state,
