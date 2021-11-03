@@ -5,10 +5,10 @@ Build instruction:
 
 to build roalogic OpenOCD, use the following sequence of commands:
 
-./bootstrap
-./configure [options]
-make
-sudo make install
+>./bootstrap
+>./configure [options]
+>make
+>sudo make install
 
 optional to clean the directory:
 make distclean
@@ -20,11 +20,13 @@ OpenOCD, usually with one or more options provided to it. The first
 the files in the required location.
 
 To see the list of all the supported options, run
-  ./configure --help
+>./configure --help
 
-Interesting options:
---prefix=<install_dir>   	This option sets the installation directory
---enable-jtag_vpi		This option enables the vpi client for simulatie debugging
+This option sets the installation directory
+>--prefix=<install_dir>   
+
+This option enables the vpi client for simulatie debugging	
+>--enable-jtag_vpi		
 
 Run roalogic OpenOCD:
 
@@ -32,8 +34,11 @@ To be added (*.cfg to be created)
 
 GDB connection over terminal
 
->set remotetimeout 30			Sets the command timeout to 30 seconds (for simulation)
->set arch riscv:rv32			Select the riscv RV32 architecture
+Sets the command timeout to 30 seconds (for simulation)
+>set remotetimeout 30	
+
+Select the riscv RV32 architecture		
+>set arch riscv:rv32			
 
 Run from GDB terminal to connect:
 >target extended remote:3333		Command to connect GDB with roalogic OpenOCD
@@ -43,4 +48,5 @@ use help for all commands
 
 Telnet connection over terminal
 >telnet localhost 4444
+
 use help for all commands or look at: openocd.org/doc/html/General-Commands.html
