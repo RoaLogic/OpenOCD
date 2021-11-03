@@ -23,6 +23,116 @@
 #include "config.h"
 #endif
 
+
+#define JSP_BANNER "\n\r" \
+		   "******************************\n\r" \
+		   "**     JTAG Serial Port     **\n\r" \
+		   "******************************\n\r" \
+		   "\n\r"
+
+#define NO_OPTION			0
+
+/* This an option to the adv debug unit.
+ * If this is defined, status bits will be skipped on burst
+ * reads and writes to improve download speeds.
+ * This option must match the RTL configured option.
+ */
+#define USE_HISPEED			1
+
+
+/* This an option to the adv debug unit.
+ * If this is defined, the JTAG Serial Port Server is started.
+ * This option must match the RTL configured option.
+ */
+#define ENABLE_JSP_SERVER		2
+
+
+/* Define this if you intend to use the JSP in a system with multiple
+ * devices on the JTAG chain
+ */
+#define ENABLE_JSP_MULTI		4
+
+
+/* Definitions for the top-level debug unit.  This really just consists
+ * of a single register, used to select the active debug module ("chain").
+ */
+#define DBG_MODULE_SELECT_REG_SIZE	2
+#define DBG_MAX_MODULES			4
+
+#define DC_NONE				-1
+#define DC_SYSBUS   			0
+#define DC_CPU				1
+#define DC_JSP				2
+
+
+/* CPU control register bits mask */
+#define DBG_CPU_CR_STALL		0x01
+#define DBG_CPU_CR_RESET		0x02
+
+
+/* Polynomial for the CRC calculation
+ * Yes, it's backwards.  Yes, this is on purpose.
+ * The hardware is designed this way to save on logic and routing,
+ * and it's really all the same to us here.
+ */
+#define ADBG_CRC_POLY			0xedb88320
+
+
+/* These are for the internal registers in the SystemBus module
+ * The first is the length of the index register,
+ * the indexes of the various registers are defined after that.
+ */
+#define DBG_SYSBUS_REG_SEL_LEN		1
+#define DBG_SYSBUS_REG_ERROR		0
+
+
+/* Opcode definitions for the SystemBus module. */
+#define DBG_SYSBUS_OPCODE_LEN		4
+#define DBG_SYSBUS_CMD_NOP		0x0
+#define DBG_SYSBUS_CMD_BWRITE8		0x1
+#define DBG_SYSBUS_CMD_BWRITE16		0x2
+#define DBG_SYSBUS_CMD_BWRITE32		0x3
+#define DBG_SYSBUS_CMD_BWRITE64		0x4
+#define DBG_SYSBUS_CMD_BREAD8		0x5
+#define DBG_SYSBUS_CMD_BREAD16		0x6
+#define DBG_SYSBUS_CMD_BREAD32		0x7
+#define DBG_SYSBUS_CMD_BREAD64		0x8
+#define DBG_SYSBUS_CMD_IREG_WR		0x9
+#define DBG_SYSBUS_CMD_IREG_SEL		0xd
+
+
+/* Internal register definitions for the CP module. */
+#define DBG_CPU_REG_SEL_LEN		1
+#define DBG_CPU_REG_STATUS		0
+
+
+/* CPU Select */
+#define DBG_CPU_CPUSEL_LEN		4
+
+
+/* Opcode definitions for the CPU module. */
+#define DBG_CPU_OPCODE_LEN		4
+#define DBG_CPU_CMD_NOP			0x0
+#define DBG_CPU_CMD_BWRITE32		0x3
+#define DBG_CPU_CMD_BREAD32		0x7
+#define DBG_CPU_CMD_IREG_WR		0x9
+#define DBG_CPU_CMD_IREG_SEL		0xd
+
+
+#define MAX_READ_STATUS_WAIT		10
+#define MAX_READ_BUSY_RETRY		2
+#define MAX_READ_CRC_RETRY		2
+#define MAX_WRITE_CRC_RETRY		2
+#define BURST_READ_READY		1
+#define MAX_BUS_ERRORS			2
+
+#define MAX_BURST_SIZE			(4 * 1024)
+
+#define STATUS_BYTES			1
+#define CRC_LEN				4
+
+
+
 #define CPU_STALL	0
 #define CPU_UNSTALL	1
 

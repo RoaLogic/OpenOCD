@@ -30,103 +30,6 @@
 #include <target/target.h>
 #include <jtag/jtag.h>
 
-#define JSP_BANNER "\n\r" \
-		   "******************************\n\r" \
-		   "**     JTAG Serial Port     **\n\r" \
-		   "******************************\n\r" \
-		   "\n\r"
-
-#define NO_OPTION			0
-
-/* This an option to the adv debug unit.
- * If this is defined, status bits will be skipped on burst
- * reads and writes to improve download speeds.
- * This option must match the RTL configured option.
- */
-#define USE_HISPEED			1
-
-/* This an option to the adv debug unit.
- * If this is defined, the JTAG Serial Port Server is started.
- * This option must match the RTL configured option.
- */
-#define ENABLE_JSP_SERVER		2
-
-/* Define this if you intend to use the JSP in a system with multiple
- * devices on the JTAG chain
- */
-#define ENABLE_JSP_MULTI		4
-
-/* Definitions for the top-level debug unit.  This really just consists
- * of a single register, used to select the active debug module ("chain").
- */
-#define DBG_MODULE_SELECT_REG_SIZE	2
-#define DBG_MAX_MODULES			3
-
-#define DC_NONE				-1
-#define DC_SYSBUS   			0
-#define DC_CPU				1
-#define DC_JSP				2
-
-
-/* CPU control register bits mask */
-#define DBG_CPU_CR_STALL		0x01
-#define DBG_CPU_CR_RESET		0x02
-
-/* Polynomial for the CRC calculation
- * Yes, it's backwards.  Yes, this is on purpose.
- * The hardware is designed this way to save on logic and routing,
- * and it's really all the same to us here.
- */
-#define ADBG_CRC_POLY			0xedb88320
-
-/* These are for the internal registers in the SystemBus module
- * The first is the length of the index register,
- * the indexes of the various registers are defined after that.
- */
-#define DBG_SYSBUS_REG_SEL_LEN		1
-#define DBG_SYSBUS_REG_ERROR		0
-
-/* Opcode definitions for the SystemBus module. */
-#define DBG_SYSBUS_OPCODE_LEN		4
-#define DBG_SYSBUS_CMD_NOP		0x0
-#define DBG_SYSBUS_CMD_BWRITE8		0x1
-#define DBG_SYSBUS_CMD_BWRITE16		0x2
-#define DBG_SYSBUS_CMD_BWRITE32		0x3
-#define DBG_SYSBUS_CMD_BWRITE64		0x4
-#define DBG_SYSBUS_CMD_BREAD8		0x5
-#define DBG_SYSBUS_CMD_BREAD16		0x6
-#define DBG_SYSBUS_CMD_BREAD32		0x7
-#define DBG_SYSBUS_CMD_BREAD64		0x8
-#define DBG_SYSBUS_CMD_IREG_WR		0x9
-#define DBG_SYSBUS_CMD_IREG_SEL		0xd
-
-/* Internal register definitions for the CP module. */
-#define DBG_CPU_REG_SEL_LEN		1
-#define DBG_CPU_REG_STATUS		0
-
-/* CPU Select */
-#define DBG_CPU_CPUSEL_LEN		4
-
-/* Opcode definitions for the CPU module. */
-#define DBG_CPU_OPCODE_LEN		4
-#define DBG_CPU_CMD_NOP			0x0
-#define DBG_CPU_CMD_BWRITE32		0x3
-#define DBG_CPU_CMD_BREAD32		0x7
-#define DBG_CPU_CMD_IREG_WR		0x9
-#define DBG_CPU_CMD_IREG_SEL		0xd
-
-
-#define MAX_READ_STATUS_WAIT		10
-#define MAX_READ_BUSY_RETRY		2
-#define MAX_READ_CRC_RETRY		2
-#define MAX_WRITE_CRC_RETRY		2
-#define BURST_READ_READY		1
-#define MAX_BUS_ERRORS			2
-
-#define MAX_BURST_SIZE			(4 * 1024)
-
-#define STATUS_BYTES			1
-#define CRC_LEN				4
 
 static struct rl_du rl_dbg_adv;
 
@@ -180,9 +83,9 @@ static int rl_adv_jtag_init(struct rl_jtag *jtag_info)
 	jtag_info->rl_jtag_inited = 1;
 
 	/* TODO hardcoded HW parameters */
-        jtag_info->address_size = 32;
+        jtag_info->rl_jtag_address_size = 32;
 //	jtag_info->cpu_size = 4;
-	jtag_info->cpu_selected = 0;
+	jtag_info->rl_jtag_cpu_selected = 0;
 	
 	/* TAP reset - not sure what state debug module chain is in now */
 	jtag_info->rl_jtag_module_selected = DC_NONE;
@@ -342,6 +245,7 @@ static int adbg_ctrl_write(struct rl_jtag *jtag_info, uint8_t regidx,
 	field[0].num_bits  = length_bits;
 	field[0].out_value = (uint8_t *)cmd_data;
 	field[0].in_value  = NULL;
+printf("rih - opcode_len:%0d, cpusel_len:%0d, index_len:%0d, dlength:%d\n", opcode_len, cpusel_len, index_len, length_bits);
 
 	field[1].num_bits  = 1+ opcode_len + cpusel_len + index_len;
 	field[1].out_value = (uint8_t *)&data;
@@ -833,8 +737,9 @@ static int rl_adv_cpu_stall(struct rl_jtag *jtag_info, int action)
 	if (retval != ERROR_OK)
 		return retval;
 
+	//RiH: the '1' length should be NoCPU
 	uint32_t cpu_cr;
-	retval = adbg_ctrl_read(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 2);
+	retval = adbg_ctrl_read(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 1);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -847,7 +752,7 @@ static int rl_adv_cpu_stall(struct rl_jtag *jtag_info, int action)
 	if (retval != ERROR_OK)
 		return retval;
 
-	return adbg_ctrl_write(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 2);
+	return adbg_ctrl_write(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 1);
 }
 
 static int rl_adv_is_cpu_running(struct rl_jtag *jtag_info, int *running)
