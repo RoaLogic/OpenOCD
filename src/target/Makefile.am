@@ -258,6 +258,7 @@ ARC_SRC = \
 	%D%/arc_mem.h \
 	%D%/rtt.h
 
+include %D%/roalogic/Makefile.am
 include %D%/openrisc/Makefile.am
 include %D%/riscv/Makefile.am
-include %D%/roalogic/Makefile.am
+

@@ -358,6 +358,7 @@ static int adbg_ctrl_read(struct rl_jtag *jtag_info, uint32_t regidx,
 		return retval;
 	}
 
+    int      cpusel = 0;
 	int cpusel_len;
 	int opcode_len;
 	uint32_t opcode;
@@ -409,7 +410,7 @@ static int adbg_ctrl_read(struct rl_jtag *jtag_info, uint32_t regidx,
  */
 static int adbg_burst_command(struct rl_jtag *jtag_info,
 			      uint32_t opcode, uint8_t opcode_len,
-			      uint32_t address, uint8_t address_len,
+			      uint64_t address, uint8_t address_len,
 			      uint32_t cpusel, uint8_t cpusel_len,
 			      uint16_t length_words)
 {
@@ -418,9 +419,9 @@ static int adbg_burst_command(struct rl_jtag *jtag_info,
 
 
 	/* Total bitcount */
-        bitcount  = 1;            //1bit module command
+    bitcount  = 1;            //1bit module command
 	bitcount += opcode_len;   //4bit opcode
-	bitcoutn += cpusel_len;   //4bit CPU select
+	bitcount += cpusel_len;   //4bit CPU select
 	bitcount += address_len;  //Address
 	bitcount += 16;           //Burst Length
 
@@ -474,7 +475,7 @@ static int adbg_sysbus_burst_read(struct rl_jtag *jtag_info, int size,
 
 	uint8_t opcode;
 	uint8_t opcode_len;
-	uint8_t cpusel;
+	uint8_t cpusel = 0;
 	uint8_t cpusel_len;
 	uint8_t address_len;
 
@@ -638,7 +639,7 @@ static int adbg_sysbus_burst_write(struct rl_jtag *jtag_info, const uint8_t *dat
 
 	uint8_t opcode;
 	uint8_t opcode_len;
-	uint8_t cpusel;
+	uint8_t cpusel = 0;
 	uint8_t cpusel_len;
 	uint8_t address_len;
 
@@ -811,7 +812,7 @@ static int rl_adv_jtag_write_cpu(struct rl_jtag *jtag_info,
 	if (retval != ERROR_OK)
 		return retval;
 
-	return adbg_sysbusb_burst_write(jtag_info, (uint8_t *)value, 4, count, addr);
+	return adbg_sysbus_burst_write(jtag_info, (uint8_t *)value, 4, count, addr);
 }
 
 static int rl_adv_cpu_stall(struct rl_jtag *jtag_info, int action)
@@ -1019,7 +1020,7 @@ static int rl_adv_jtag_write_memory(struct rl_jtag *jtag_info,
 		int blocks_this_round = (block_count_left > MAX_BURST_SIZE) ?
 			MAX_BURST_SIZE : block_count_left;
 
-		retval = adbg_sysbusb_burst_write(jtag_info, block_count_buffer,
+		retval = adbg_sysbus_burst_write(jtag_info, block_count_buffer,
 					         size, blocks_this_round,
 					         block_count_address);
 		if (retval != ERROR_OK) {

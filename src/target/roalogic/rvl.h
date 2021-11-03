@@ -164,11 +164,14 @@ struct rl_jtag {
 	struct  jtag_tap *tap;
 	int     rl_jtag_inited;
 	int     rl_jtag_module_selected;
+	int     rl_jtag_cpu_selected;
+	int     rl_jtag_address_size;
 	uint8_t *current_reg_idx;
 	struct  rl_tap_ip *tap_ip;
 	struct  rl_du *du_core;
 	struct  target *target;
 };
+
 
 struct rvl_common {
 	struct   rl_jtag jtag;
