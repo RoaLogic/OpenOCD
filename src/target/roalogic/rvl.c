@@ -34,8 +34,8 @@
 #include "rvl.h"
 #include "rl_dbg_adv.h"
 
-LIST_HEAD(tap_list);
-LIST_HEAD(du_list);
+LIST_HEAD(rl_tap_list);
+LIST_HEAD(rl_du_list);
 
 static int rvl_remove_breakpoint(struct target *target,
 			         struct breakpoint *breakpoint);
@@ -1198,7 +1198,7 @@ static int rvl_profiling(struct target *target, uint32_t *samples,
 	return retval;
 }
 
-COMMAND_HANDLER(rvl_tap_select_command_handler)
+COMMAND_HANDLER(rl_tap_select_command_handler)
 {
 	struct target *target = get_current_target(CMD_CTX);
 	struct rvl_common *rvl = target_to_rvl(target);
@@ -1208,7 +1208,7 @@ COMMAND_HANDLER(rvl_tap_select_command_handler)
 	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	list_for_each_entry(rl_tap, &tap_list, list) {
+	list_for_each_entry(rl_tap, &rl_tap_list, list) {
 		if (rl_tap->name) {
 			if (!strcmp(CMD_ARGV[0], rl_tap->name)) {
 				jtag->tap_ip = rl_tap;
@@ -1222,14 +1222,14 @@ COMMAND_HANDLER(rvl_tap_select_command_handler)
 	return ERROR_COMMAND_SYNTAX_ERROR;
 }
 
-COMMAND_HANDLER(rvl_tap_list_command_handler)
+COMMAND_HANDLER(rl_tap_list_command_handler)
 {
 	struct rl_tap_ip *rl_tap;
 
 	if (CMD_ARGC != 0)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	list_for_each_entry(rl_tap, &tap_list, list) {
+	list_for_each_entry(rl_tap, &rl_tap_list, list) {
 		if (rl_tap->name)
 			command_print(CMD, "%s", rl_tap->name);
 	}
@@ -1237,7 +1237,7 @@ COMMAND_HANDLER(rvl_tap_list_command_handler)
 	return ERROR_OK;
 }
 
-COMMAND_HANDLER(rvl_du_select_command_handler)
+COMMAND_HANDLER(rl_du_select_command_handler)
 {
 	struct target *target = get_current_target(CMD_CTX);
 	struct rvl_common *rvl = target_to_rvl(target);
@@ -1247,7 +1247,7 @@ COMMAND_HANDLER(rvl_du_select_command_handler)
 	if (CMD_ARGC > 2)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	list_for_each_entry(rl_du, &du_list, list) {
+	list_for_each_entry(rl_du, &rl_du_list, list) {
 		if (rl_du->name) {
 			if (!strcmp(CMD_ARGV[0], rl_du->name)) {
 				jtag->du_core = rl_du;
@@ -1270,14 +1270,14 @@ COMMAND_HANDLER(rvl_du_select_command_handler)
 	return ERROR_COMMAND_SYNTAX_ERROR;
 }
 
-COMMAND_HANDLER(rvl_du_list_command_handler)
+COMMAND_HANDLER(rl_du_list_command_handler)
 {
 	struct rl_du *rl_du;
 
 	if (CMD_ARGC != 0)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	list_for_each_entry(rl_du, &du_list, list) {
+	list_for_each_entry(rl_du, &rl_du_list, list) {
 		if (rl_du->name)
 			command_print(CMD, "%s", rl_du->name);
 	}
@@ -1314,29 +1314,29 @@ COMMAND_HANDLER(rvl_addreg_command_handler)
 
 static const struct command_registration rvl_hw_ip_command_handlers[] = {
 	{
-		.name = "tap_select",
-		.handler = rvl_tap_select_command_handler,
+		.name = "rl_tap_select",
+		.handler = rl_tap_select_command_handler,
 		.mode = COMMAND_ANY,
 		.usage = "name",
 		.help = "Select the TAP core to use",
 	},
 	{
-		.name = "tap_list",
-		.handler = rvl_tap_list_command_handler,
+		.name = "rl_tap_list",
+		.handler = rl_tap_list_command_handler,
 		.mode = COMMAND_ANY,
 		.usage = "",
 		.help = "Display available TAP core",
 	},
 	{
-		.name = "du_select",
-		.handler = rvl_du_select_command_handler,
+		.name = "rl_du_select",
+		.handler = rl_du_select_command_handler,
 		.mode = COMMAND_ANY,
 		.usage = "name",
 		.help = "Select the Debug Unit core to use",
 	},
 	{
-		.name = "du_list",
-		.handler = rvl_du_list_command_handler,
+		.name = "rl_du_list",
+		.handler = rl_du_list_command_handler,
 		.mode = COMMAND_ANY,
 		.usage = "select_tap name",
 		.help = "Display available Debug Unit core",

@@ -29,7 +29,7 @@ int rl_tap_vjtag_register(void);
 int rl_universal_tap_register(void);
 
 /* Linear list over all available Roa Logic TAPs */
-extern struct list_head tap_list;
+extern struct list_head rl_tap_list;
 
 struct rl_tap_ip {
 	struct list_head list;

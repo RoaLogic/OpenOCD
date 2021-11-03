@@ -1122,7 +1122,7 @@ int rl_adv_jtag_jsp_xfer(struct rl_jtag *jtag_info,
 }
 
 static struct rl_du rl_dbg_adv = {
-	.name                   = "Roa Logic Advanced Debug",
+	.name                   = "rl_dbg_adv",
 	.options                = NO_OPTION,
 	.rl_jtag_init           = rl_adv_jtag_init,
 
@@ -1139,6 +1139,6 @@ static struct rl_du rl_dbg_adv = {
 
 int rl_dbg_adv_register(void)
 {
-	list_add_tail(&rl_dbg_adv.list, &du_list);
+	list_add_tail(&rl_dbg_adv.list, &rl_du_list);
 	return 0;
 }

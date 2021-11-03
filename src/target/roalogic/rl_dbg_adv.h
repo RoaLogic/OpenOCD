@@ -46,7 +46,7 @@
 int rl_dbg_adv_register(void);
 
 /* Linear list over all available or1k debug unit */
-extern struct list_head du_list;
+extern struct list_head rl_du_list;
 
 struct rl_du {
 	const char *name;

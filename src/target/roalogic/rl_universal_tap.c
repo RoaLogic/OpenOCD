@@ -60,6 +60,6 @@ static struct rl_tap_ip universal_tap = {
 
 int rl_universal_tap_register(void)
 {
-	list_add_tail(&universal_tap.list, &tap_list);
+	list_add_tail(&universal_tap.list, &rl_tap_list);
 	return 0;
 }
