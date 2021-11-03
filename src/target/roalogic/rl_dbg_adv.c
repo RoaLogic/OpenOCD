@@ -179,6 +179,11 @@ static int rl_adv_jtag_init(struct rl_jtag *jtag_info)
 	/* TAP is now configured to communicate with debug interface */
 	jtag_info->rl_jtag_inited = 1;
 
+	/* TODO hardcoded HW parameters */
+        jtag_info->address_size = 32;
+//	jtag_info->cpu_size = 4;
+	jtag_info->cpu_selected = 0;
+	
 	/* TAP reset - not sure what state debug module chain is in now */
 	jtag_info->rl_jtag_module_selected = DC_NONE;
 
