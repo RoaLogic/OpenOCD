@@ -123,8 +123,14 @@ static const struct rvl_core_reg_init rvl_init_reg_list[] = {
 	{"t5",            GROUP_RF   + 30,             "org.gnu.gdb.riscv.cpu", NULL},
 	{"t6",            GROUP_RF   + 31,             "org.gnu.gdb.riscv.cpu", NULL},
 
+
+	/* PC */
+        {"pc",            GROUP_GPRS + 0x200,          "org.gnu.gdb.rvl.dbg",   NULL},
+
+
 	/* Floating Point Register File */
 	
+
 	/* CSRs */
         {"ustatus",       GROUP_CSR  + CSR_USTATUS,    "org.gnu.gdb.riscv.csr", NULL},
         {"uie",           GROUP_CSR  + CSR_UIE,        "org.gnu.gdb.riscv.csr", NULL},
@@ -145,7 +151,7 @@ static const struct rvl_core_reg_init rvl_init_reg_list[] = {
         {"instreth",      GROUP_CSR  + CSR_INSTRETH,   "org.gnu.gdb.riscv.csr", NULL},
 
         {"sstatus",       GROUP_CSR  + CSR_SSTATUS,    "org.gnu.gdb.riscv.csr", NULL},
-        {"sedeleg",       GROUP_CSR  + CSR_SEDELEG,     "org.gnu.gdb.riscv.csr", NULL},
+        {"sedeleg",       GROUP_CSR  + CSR_SEDELEG,    "org.gnu.gdb.riscv.csr", NULL},
         {"sideleg",       GROUP_CSR  + CSR_SIDELEG,    "org.gnu.gdb.riscv.csr", NULL},
         {"sie",           GROUP_CSR  + CSR_SIE,        "org.gnu.gdb.riscv.csr", NULL},
         {"stvec",         GROUP_CSR  + CSR_STVEC,      "org.gnu.gdb.riscv.csr", NULL},
@@ -203,7 +209,6 @@ static const struct rvl_core_reg_init rvl_init_reg_list[] = {
 
 
 	/* Debug Unit Internals */
-	{"ppc",           GROUP_GPRS + 0x200,          "org.gnu.gdb.rvl.dbg", NULL},
 	{"npc",           GROUP_GPRS + 0x201,          "org.gnu.gdb.rvl.dbg", NULL},
 	{"dbgctrl",       GROUP_DBG  +  0x00,          "org.gnu.gdb.rvl.dbg", NULL},
 	{"dbghit",        GROUP_DBG  +  0x01,          "org.gnu.gdb.rvl.dbg", NULL},
@@ -291,14 +296,14 @@ static int rvl_save_context(struct target *target)
 	LOG_DEBUG("-");
 
 	for (int i = 0; i < GDB_REGNO_FPR0; i++) 
-    {
+    	{
 		if (!rvl->core_cache->reg_list[i].valid) 
-        {
-            // Read the PC for the PPC
-		    if (i == GDB_REGNO_PC) 
-            {
+		{
+			// Read the PC for the PPC
+			if (i == GDB_REGNO_PC) 
+	    		{
+				// Read the PPC register
 				retval = du_core->rl_jtag_read_cpu(&rvl->jtag,
-                        // Read the PPC register
 						(GROUP_GPRS + 0x200), 1,
 						&rvl->core_regs[i]);
 
@@ -484,7 +489,7 @@ static struct reg_cache *rvl_build_reg_cache(struct target *target)
 	LOG_DEBUG("-");
 
 	/* Build the process context cache */
-	cache->name = "RoaLogic lattice registers";
+	cache->name = "Roa Logic RISC-V Registers";
 	cache->next = NULL;
 	cache->reg_list = reg_list;
 	cache->num_regs = rvl->nb_regs;
@@ -622,7 +627,7 @@ static int rvl_poll(struct target *target)
 
 	retval = rl_is_cpu_running(target, &running);
 	if (retval != ERROR_OK) {
-		LOG_ERROR("Error while calling or1k_is_cpu_running");
+		LOG_ERROR("Error while calling rl_is_cpu_running");
 		return retval;
 	}
 
@@ -639,7 +644,7 @@ static int rvl_poll(struct target *target)
 			retval = rvl_debug_entry(target);
 			if (retval != ERROR_OK) 
             {
-				LOG_ERROR("Error while calling or1k_debug_entry");
+				LOG_ERROR("Error while calling rvl_debug_entry");
 				return retval;
 			}
 
@@ -652,7 +657,7 @@ static int rvl_poll(struct target *target)
 			retval = rvl_debug_entry(target);
 			if (retval != ERROR_OK) 
             {
-				LOG_ERROR("Error while calling or1k_debug_entry");
+				LOG_ERROR("Error while calling rvl_debug_entry");
 				return retval;
 			}
 
@@ -670,14 +675,14 @@ static int rvl_poll(struct target *target)
 			retval = rvl_halt(target);
 			if (retval != ERROR_OK) 
             {
-				LOG_ERROR("Error while calling or1k_halt");
+				LOG_ERROR("Error while calling rvl_halt");
 				return retval;
 			}
 
 			retval = rvl_debug_entry(target);
 			if (retval != ERROR_OK) 
             {
-				LOG_ERROR("Error while calling or1k_debug_entry");
+				LOG_ERROR("Error while calling rvl_debug_entry");
 				return retval;
 			}
 
@@ -790,7 +795,7 @@ static int rvl_resume_or_step(struct target *target, int current,
 
 	int retval = rvl_restore_context(target);
 	if (retval != ERROR_OK) {
-		LOG_ERROR("Error while calling or1k_restore_context");
+		LOG_ERROR("Error while calling rvl_restore_context");
 		return retval;
 	}
 
@@ -1025,6 +1030,8 @@ static int rvl_read_memory(struct target *target, target_addr_t address,
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
+
+	//TODO: 64bit accesses (for 64bit CPU)
 	/* Sanitize arguments */
 	if (((size != 4) && (size != 2) && (size != 1)) || (count == 0) || !buffer) {
 		LOG_ERROR("Bad arguments");
@@ -1032,7 +1039,7 @@ static int rvl_read_memory(struct target *target, target_addr_t address,
 	}
 
 	if (((size == 4) && (address & 0x3u)) || ((size == 2) && (address & 0x1u))) {
-		LOG_ERROR("Can't handle unaligned memory access");
+		LOG_ERROR("Unaligned memory access not supported");
 		return ERROR_TARGET_UNALIGNED_ACCESS;
 	}
 
@@ -1052,6 +1059,8 @@ static int rvl_write_memory(struct target *target, target_addr_t address,
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
+
+	//TODO: 64bit accesses for 64bit CPU
 	/* Sanitize arguments */
 	if (((size != 4) && (size != 2) && (size != 1)) || (count == 0) || !buffer) {
 		LOG_ERROR("Bad arguments");
@@ -1059,7 +1068,7 @@ static int rvl_write_memory(struct target *target, target_addr_t address,
 	}
 
 	if (((size == 4) && (address & 0x3u)) || ((size == 2) && (address & 0x1u))) {
-		LOG_ERROR("Can't handle unaligned memory access");
+		LOG_ERROR("Unaligned memory access not supported");
 		return ERROR_TARGET_UNALIGNED_ACCESS;
 	}
 
@@ -1161,9 +1170,11 @@ static int rvl_get_gdb_reg_list(struct target *target, struct reg **reg_list[],
 		/* We will have this called whenever GDB connects. */
 		int retval = rvl_save_context(target);
 		if (retval != ERROR_OK) {
-			LOG_ERROR("Error while calling or1k_save_context");
+			LOG_ERROR("Error while calling rvl_save_context");
 			return retval;
 		}
+
+		//TODO Load FPR when the CPU has a FPU
 		*reg_list_size = GDB_REGNO_FPR0;
 		/* this is free()'d back in gdb_server.c's gdb_get_register_packet() */
 		*reg_list = malloc((*reg_list_size) * sizeof(struct reg *));
@@ -1204,7 +1215,7 @@ static int rvl_profiling(struct target *target, uint32_t *samples,
 	gettimeofday(&timeout, NULL);
 	timeval_add_time(&timeout, seconds, 0);
 
-	LOG_INFO("Starting or1k profiling. Sampling npc as fast as we can...");
+	LOG_INFO("Starting rvl profiling. Sampling npc as fast as we can...");
 
 	/* Make sure the target is running */
 	target_poll(target);
