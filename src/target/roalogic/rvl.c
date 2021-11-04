@@ -82,8 +82,14 @@ static const struct rvl_core_reg_init rvl_init_reg_list[] = {
 	{"t5",            GROUP_RF   + 30,             "org.gnu.gdb.riscv.cpu", NULL},
 	{"t6",            GROUP_RF   + 31,             "org.gnu.gdb.riscv.cpu", NULL},
 
+
+	/* PC */
+        {"pc",            GROUP_GPRS + 0x200,          "org.gnu.gdb.rvl.dbg",   NULL},
+
+
 	/* Floating Point Register File */
 	
+
 	/* CSRs */
         {"ustatus",       GROUP_CSR  + CSR_USTATUS,    "org.gnu.gdb.riscv.csr", NULL},
         {"uie",           GROUP_CSR  + CSR_UIE,        "org.gnu.gdb.riscv.csr", NULL},
@@ -104,7 +110,7 @@ static const struct rvl_core_reg_init rvl_init_reg_list[] = {
         {"instreth",      GROUP_CSR  + CSR_INSTRETH,   "org.gnu.gdb.riscv.csr", NULL},
 
         {"sstatus",       GROUP_CSR  + CSR_SSTATUS,    "org.gnu.gdb.riscv.csr", NULL},
-        {"sedeleg",       GROUP_CSR  + CSR_SEDELEG,     "org.gnu.gdb.riscv.csr", NULL},
+        {"sedeleg",       GROUP_CSR  + CSR_SEDELEG,    "org.gnu.gdb.riscv.csr", NULL},
         {"sideleg",       GROUP_CSR  + CSR_SIDELEG,    "org.gnu.gdb.riscv.csr", NULL},
         {"sie",           GROUP_CSR  + CSR_SIE,        "org.gnu.gdb.riscv.csr", NULL},
         {"stvec",         GROUP_CSR  + CSR_STVEC,      "org.gnu.gdb.riscv.csr", NULL},
@@ -162,7 +168,6 @@ static const struct rvl_core_reg_init rvl_init_reg_list[] = {
 
 
 	/* Debug Unit Internals */
-	{"ppc",           GROUP_GPRS + 0x200,          "org.gnu.gdb.rvl.dbg", NULL},
 	{"npc",           GROUP_GPRS + 0x201,          "org.gnu.gdb.rvl.dbg", NULL},
 	{"dbgctrl",       GROUP_DBG  +  0x00,          "org.gnu.gdb.rvl.dbg", NULL},
 	{"dbghit",        GROUP_DBG  +  0x01,          "org.gnu.gdb.rvl.dbg", NULL},
@@ -250,14 +255,14 @@ static int rvl_save_context(struct target *target)
 	LOG_DEBUG("-");
 
 	for (int i = 0; i < GDB_REGNO_FPR0; i++) 
-    {
+    	{
 		if (!rvl->core_cache->reg_list[i].valid) 
-        {
-            // Read the PC for the PPC
-		    if (i == GDB_REGNO_PC) 
-            {
+		{
+			// Read the PC for the PPC
+			if (i == GDB_REGNO_PC) 
+	    		{
+				// Read the PPC register
 				retval = du_core->rl_jtag_read_cpu(&rvl->jtag,
-                        // Read the PPC register
 						(GROUP_GPRS + 0x200), 1,
 						&rvl->core_regs[i]);
 
