@@ -34,6 +34,47 @@
 #include "rvl.h"
 #include "rl_dbg_adv.h"
 
+// Test system defines
+
+//test-system SRAM start
+#define SRAM_BASE        0x00010000
+
+// DBG CTRL
+//Bit definitions
+#define DBG_CTRL_SINGLE_STEP_TRACE	0x01       /* Enable single-step trace                        */
+#define DBG_CTRL_BRANCH_TRACE		0x02       /* Enable branch-trace                             */
+
+#define DBG_HIT_SINGLE_STEP		0x01       /* Single-Step caused breakpoint                   */
+#define DBG_HIT_BRANCH			0x02       /* Branch-trace caused breakpoint                  */
+#define DBG_HIT_BP(N)			(0x10 <<N) /* BreakPoint(n) caused breakpoint             */
+#define DBG_HIT_MASK			0xFF3      /* Masks all HIT bits                              */
+#define DBG_HIT_BP_MASK			0xFF0      /* Masks all BP HIT bits                           */
+
+#define DBG_BPCTRL_IMPLEMENTED		0x01
+#define DBG_BPCTRL_ENABLED		0x02
+#define DBG_BPCTRL_CC_INST_FETCH	(0x0 << 4)
+#define DBG_BPCTRL_CC_LD_ADR 		(0x1 << 4)
+#define DBG_BPCTRL_CC_ST_ADR		(0x2 << 4)
+#define DBG_BPCTRL_CC_LDST_ADR		(0x3 << 4)
+#define DBG_BPCTRL_CC_MASK              (0x7 << 4)
+
+#define DBG_IE_INST_MISALIGNED		0x00001
+#define DBG_IE_INST_ACCESS_FAULT	0x00002
+#define DBG_IE_ILLEGAL			0x00004
+#define DBG_IE_BREAKPOINT		0x00008
+#define DBG_IE_LOAD_MISALIGNED		0x00010
+#define DBG_IE_LOAD_ACCESS_FAULT	0x00020
+#define DBG_IE_AMO_MISALIGNED		0x00040
+#define DBG_IE_STORE_ACCESS_FAULT	0x00080
+#define DBG_IE_UMODE_ECALL		0x00100
+#define DBG_IE_SMODE_ECALL		0x00200
+#define DBG_IE_HMODE_ECALL		0x00400
+#define DBG_IE_MMODE_ECALL		0x00800
+#define DBG_IE_SOFTWARE_INT		0x10000
+#define DBG_IE_TIMER_INT		0x20000
+#define DBG_IE_UART			0x40000
+
+
 LIST_HEAD(rl_tap_list);
 LIST_HEAD(rl_du_list);
 
@@ -1198,6 +1239,131 @@ static int rvl_profiling(struct target *target, uint32_t *samples,
 	return retval;
 }
 
+static int rvl_soc_test_sram(struct target *target)
+{
+    uint32_t ins;
+    uint32_t insn[9];
+
+    insn[0] = 0x11112222;
+    insn[1] = 0x33334444;
+    insn[2] = 0x55556666;
+    insn[3] = 0x77778888;
+    insn[4] = 0x9999aaaa;
+    insn[5] = 0xbbbbcccc;
+    insn[6] = 0xddddeeee;
+    insn[7] = 0xffff0000;
+    insn[8] = 0xdedababa;
+
+    for(int i = SRAM_BASE; i < SRAM_BASE+0x24; i = i+4)
+    {
+        if(rvl_write_memory(target, i, 4, 1, (uint8_t*)&insn[i]) !=ERROR_OK)
+        {
+            printf("Error: Cannot write memory\n");
+            return ERROR_FAIL;
+        } 
+    }
+
+    for(int i = SRAM_BASE; i < SRAM_BASE+0x24; i = i+4)
+    {
+        if(rvl_read_memory(target, i, 4, 1, &ins) == ERROR_OK)
+        {
+            if(ins != insn[i])
+            {
+                printf("Error: Expected: %08x, received: 08x", insn[i], ins);
+            }
+        }
+        else
+        {
+            printf("Error: Reading memory\n");
+            return ERROR_FAIL;
+        }
+    }
+
+    return ERROR_OK;
+}
+
+static int rvl_soc_test_cpu(struct target *target)
+{
+    uint32_t insn[11];
+    uint32_t illIns = 0x00000000;
+    uint32_t r1;
+
+    printf("\n-- Testing RVL-SoC CPU\n");
+    printf("writing instructions\n");
+
+    insn[0]  = 0x00004033; /* xor   x0,x0,x0               */
+    insn[1]  = 0x00000093; /* addi  x1,x0,0x0              */
+    insn[2]  = 0x00010137; /* lui   x2,0x00010  (RAM_BASE) */
+    insn[3]  = 0x03016113; /* ori   x2,x2,0x30             */
+    insn[4]  = 0x00108093; /* addi  x1,x1,1                */
+    insn[5]  = 0x00108093; /* addi  x1,x1,1                */
+    insn[6]  = 0x00112023; /* sw    0(x2),x1               */
+    insn[7]  = 0x00108093; /* addi  x1,x1,1                */
+    insn[8]  = 0x00012183; /* lw    x3,0(x2)               */
+    insn[9]  = 0x003080b3; /* add   x1,x1,x3               */
+    insn[10] = 0xfe9ff06f; /* j     (base+0x10)            */
+
+
+    for(int i = SRAM_BASE; i < SRAM_BASE+0x25; i = i+4)
+    {
+        if(rvl_write_memory(target, i, 4, 1, (uint8_t*)&insn[i]) !=ERROR_OK)
+        {
+            printf("Error: Cannot write memory\n");
+            return ERROR_FAIL;
+        } 
+    }
+
+    //Fill rest of memory with 0x00 (C.ILLEGAL). Avoid CPU going nuts on 0xxxxxx
+    for (i = SRAM_BASE+0x2c; i < SRAM_BASE+0x4c; i=i+4)
+    {
+        if(rvl_write_memory(target, i, 4, 1, (uint8_t*)&illIns) !=ERROR_OK)
+        {
+            printf("Error: Cannot write memory\n");
+            return ERROR_FAIL;
+        }
+    }
+
+    printf("Setting up CPU\n");
+
+    /*
+    * Test 1
+    */
+    printf("- Test 1, save context\n");
+
+    if(rvl_save_context(target) == ERROR_OK)
+    {
+        printf("Success: Saved context");
+    }
+    else
+    {
+        printf("Error: cannot save context");
+        return ERROR_FAIL;
+    }
+    
+    /*
+     * Test 2
+     */
+    printf("- Test 2, Single stepping\n");
+    if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_DBG  +  0x00) /* CTRL */, 1, &r1) != ERROR_OK)
+    {
+        printf("Error: cannot read DBG ctrl");
+        return ERROR_FAIL;
+    }
+
+    r1 |= DBG_CTRL_SINGLE_STEP_TRACE;
+    if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_DBG  +  0x00) /* CTRL */, 1, &r1) != ERROR_OK)
+    {
+        printf("Error: cannot read DBG ctrl");
+        return ERROR_FAIL;
+    }
+
+
+
+
+
+
+}
+
 COMMAND_HANDLER(rl_tap_select_command_handler)
 {
 	struct target *target = get_current_target(CMD_CTX);
@@ -1312,6 +1478,59 @@ COMMAND_HANDLER(rvl_addreg_command_handler)
 	return ERROR_OK;
 }
 
+COMMAND_HANDLER(rvl_test_handler)
+{
+    struct target *target = get_current_target(CMD_CTX);
+
+    if (CMD_ARGC == 0 || CMD_ARGC > 1)
+        return ERROR_COMMAND_SYNTAX_ERROR;
+
+    int options;
+	COMMAND_PARSE_NUMBER(int, CMD_ARGV[0], options);
+
+    printf("Rvl Test\n");
+
+    printf("\n RVL-SoC Stalling CPU\n");
+
+    if(rvl_halt(target) == ERROR_OK)
+    {
+        printf("Success: CPU(s) stalled\n");
+    }
+    else
+    {
+        printf("Error: CPU(s) not stalled!\n");
+        return ERROR_FAIL;
+    }
+
+    if((options & 0x00000001) >  0)
+    {
+        printf("\n RVL SoC on-chip SRAM test: \n");
+
+        if(rvl_soc_test_sram(target) == ERROR_OK)
+        {
+            printf("Success: sram test success\n");
+        }
+        else
+        {
+            printf("Error: sram test failed!\n");
+            return ERROR_FAIL;
+        }
+    }
+    else
+    {
+        printf("\n RVL SoC SRAM test disabled\n");
+    }
+
+
+
+
+
+
+
+
+    return ERROR_OK;
+}
+
 static const struct command_registration rvl_hw_ip_command_handlers[] = {
 	{
 		.name = "rl_tap_select",
@@ -1341,6 +1560,13 @@ static const struct command_registration rvl_hw_ip_command_handlers[] = {
 		.usage = "select_tap name",
 		.help = "Display available Debug Unit core",
 	},
+    {
+        .name = "rvl_test",
+        .handler = rvl_test_handler,
+        .mode = COMMAND_ANY,
+        .usage = "Test the RVL SoC",
+        .help = "Test the RvL SoC implementation",
+    },
 	COMMAND_REGISTRATION_DONE
 };
 
