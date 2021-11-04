@@ -443,7 +443,7 @@ static struct reg_cache *rvl_build_reg_cache(struct target *target)
 	LOG_DEBUG("-");
 
 	/* Build the process context cache */
-	cache->name = "RoaLogic lattice registers";
+	cache->name = "Roa Logic RISC-V Registers";
 	cache->next = NULL;
 	cache->reg_list = reg_list;
 	cache->num_regs = rvl->nb_regs;
@@ -581,7 +581,7 @@ static int rvl_poll(struct target *target)
 
 	retval = rl_is_cpu_running(target, &running);
 	if (retval != ERROR_OK) {
-		LOG_ERROR("Error while calling or1k_is_cpu_running");
+		LOG_ERROR("Error while calling rl_is_cpu_running");
 		return retval;
 	}
 
@@ -598,7 +598,7 @@ static int rvl_poll(struct target *target)
 			retval = rvl_debug_entry(target);
 			if (retval != ERROR_OK) 
             {
-				LOG_ERROR("Error while calling or1k_debug_entry");
+				LOG_ERROR("Error while calling rvl_debug_entry");
 				return retval;
 			}
 
@@ -611,7 +611,7 @@ static int rvl_poll(struct target *target)
 			retval = rvl_debug_entry(target);
 			if (retval != ERROR_OK) 
             {
-				LOG_ERROR("Error while calling or1k_debug_entry");
+				LOG_ERROR("Error while calling rvl_debug_entry");
 				return retval;
 			}
 
@@ -629,14 +629,14 @@ static int rvl_poll(struct target *target)
 			retval = rvl_halt(target);
 			if (retval != ERROR_OK) 
             {
-				LOG_ERROR("Error while calling or1k_halt");
+				LOG_ERROR("Error while calling rvl_halt");
 				return retval;
 			}
 
 			retval = rvl_debug_entry(target);
 			if (retval != ERROR_OK) 
             {
-				LOG_ERROR("Error while calling or1k_debug_entry");
+				LOG_ERROR("Error while calling rvl_debug_entry");
 				return retval;
 			}
 
@@ -749,7 +749,7 @@ static int rvl_resume_or_step(struct target *target, int current,
 
 	int retval = rvl_restore_context(target);
 	if (retval != ERROR_OK) {
-		LOG_ERROR("Error while calling or1k_restore_context");
+		LOG_ERROR("Error while calling rvl_restore_context");
 		return retval;
 	}
 
@@ -1120,9 +1120,11 @@ static int rvl_get_gdb_reg_list(struct target *target, struct reg **reg_list[],
 		/* We will have this called whenever GDB connects. */
 		int retval = rvl_save_context(target);
 		if (retval != ERROR_OK) {
-			LOG_ERROR("Error while calling or1k_save_context");
+			LOG_ERROR("Error while calling rvl_save_context");
 			return retval;
 		}
+
+		//TODO Load FPR when the CPU has a FPU
 		*reg_list_size = GDB_REGNO_FPR0;
 		/* this is free()'d back in gdb_server.c's gdb_get_register_packet() */
 		*reg_list = malloc((*reg_list_size) * sizeof(struct reg *));
@@ -1163,7 +1165,7 @@ static int rvl_profiling(struct target *target, uint32_t *samples,
 	gettimeofday(&timeout, NULL);
 	timeval_add_time(&timeout, seconds, 0);
 
-	LOG_INFO("Starting or1k profiling. Sampling npc as fast as we can...");
+	LOG_INFO("Starting rvl profiling. Sampling npc as fast as we can...");
 
 	/* Make sure the target is running */
 	target_poll(target);
