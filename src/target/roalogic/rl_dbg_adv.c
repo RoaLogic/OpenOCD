@@ -245,7 +245,6 @@ static int adbg_ctrl_write(struct rl_jtag *jtag_info, uint8_t regidx,
 	field[0].num_bits  = length_bits;
 	field[0].out_value = (uint8_t *)cmd_data;
 	field[0].in_value  = NULL;
-printf("rih - opcode_len:%0d, cpusel_len:%0d, index_len:%0d, dlength:%d\n", opcode_len, cpusel_len, index_len, length_bits);
 
 	field[1].num_bits  = 1+ opcode_len + cpusel_len + index_len;
 	field[1].out_value = (uint8_t *)&data;
@@ -737,7 +736,7 @@ static int rl_adv_cpu_stall(struct rl_jtag *jtag_info, int action)
 	if (retval != ERROR_OK)
 		return retval;
 
-	//RiH: the '1' length should be NoCPU
+	//TODO: the '1' length should be NumberOfCPU
 	uint32_t cpu_cr;
 	retval = adbg_ctrl_read(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 1);
 	if (retval != ERROR_OK)
@@ -752,6 +751,7 @@ static int rl_adv_cpu_stall(struct rl_jtag *jtag_info, int action)
 	if (retval != ERROR_OK)
 		return retval;
 
+        //TODO: the '1' length should be number of CPUs
 	return adbg_ctrl_write(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 1);
 }
 
