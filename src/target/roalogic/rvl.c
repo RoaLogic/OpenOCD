@@ -989,6 +989,8 @@ static int rvl_read_memory(struct target *target, target_addr_t address,
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
+
+	//TODO: 64bit accesses (for 64bit CPU)
 	/* Sanitize arguments */
 	if (((size != 4) && (size != 2) && (size != 1)) || (count == 0) || !buffer) {
 		LOG_ERROR("Bad arguments");
@@ -996,7 +998,7 @@ static int rvl_read_memory(struct target *target, target_addr_t address,
 	}
 
 	if (((size == 4) && (address & 0x3u)) || ((size == 2) && (address & 0x1u))) {
-		LOG_ERROR("Can't handle unaligned memory access");
+		LOG_ERROR("Unaligned memory access not supported");
 		return ERROR_TARGET_UNALIGNED_ACCESS;
 	}
 
@@ -1016,6 +1018,8 @@ static int rvl_write_memory(struct target *target, target_addr_t address,
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
+
+	//TODO: 64bit accesses for 64bit CPU
 	/* Sanitize arguments */
 	if (((size != 4) && (size != 2) && (size != 1)) || (count == 0) || !buffer) {
 		LOG_ERROR("Bad arguments");
@@ -1023,7 +1027,7 @@ static int rvl_write_memory(struct target *target, target_addr_t address,
 	}
 
 	if (((size == 4) && (address & 0x3u)) || ((size == 2) && (address & 0x1u))) {
-		LOG_ERROR("Can't handle unaligned memory access");
+		LOG_ERROR("Unaligned memory access not supported");
 		return ERROR_TARGET_UNALIGNED_ACCESS;
 	}
 
