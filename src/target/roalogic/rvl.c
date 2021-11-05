@@ -868,26 +868,26 @@ static int rvl_add_breakpoint(struct target *target,
 {
 	struct rvl_common *rvl = target_to_rvl(target);
 	struct rl_du *du_core = rl_to_du(rvl);
-	uint8_t data;
+	uint32_t data;
     int retval;
 
 	LOG_DEBUG("Adding breakpoint: addr 0x%08" TARGET_PRIxADDR ", len %d, type %d, set: %d, id: %" PRIu32,
 		  breakpoint->address, breakpoint->length, breakpoint->type,
 		  breakpoint->set, breakpoint->unique_id);
 
-    /* Only support SW breakpoints for now. */
+     /* Only support SW breakpoints for now. */
     if(breakpoint->type != BKPT_SOFT)
     {
         LOG_ERROR("HW breakpoints not supported for now\n");
         return ERROR_FAIL;
     }
 
-    if(breakpoint->length != 2 || breakpoint->length != 4)
+    if(breakpoint->length != 2 && breakpoint->length != 4)
     {
         LOG_ERROR("Breakpoint unsupported length\n");
         return ERROR_FAIL;
     }
-	
+
 
     if(breakpoint->length == 2)
     {
@@ -896,7 +896,7 @@ static int rvl_add_breakpoint(struct target *target,
                         breakpoint->address,
                         2,
                         1,
-                        &data);
+                        (uint8_t*)&data);
     }
     else
     {
@@ -905,7 +905,7 @@ static int rvl_add_breakpoint(struct target *target,
                         breakpoint->address,
                         4,
                         1,
-                        &data);
+                        (uint8_t*)&data);
     }
 
 	if (retval != ERROR_OK) 
@@ -914,7 +914,7 @@ static int rvl_add_breakpoint(struct target *target,
 			   breakpoint->address);
 		return retval;
 	}
-
+   
 	free(breakpoint->orig_instr);
 
 	breakpoint->orig_instr = malloc(breakpoint->length);
@@ -922,31 +922,24 @@ static int rvl_add_breakpoint(struct target *target,
 
     if(breakpoint->length == 2)
     {
-        uint8_t rvl_trap_insn[2];
-        target_buffer_set_u32(target, rvl_trap_insn, RV_EBREAK16_INSTR);
+        uint16_t rvl_trap_insn16 = RV_EBREAK16_INSTR;
+        //target_buffer_set_u32(target, rvl_trap_insn, RV_EBREAK16_INSTR);
         retval = du_core->rl_jtag_write_memory(&rvl->jtag,
                         breakpoint->address,
                         2,
                         1,
-                        rvl_trap_insn);
+                        (uint8_t*)&rvl_trap_insn16);
     }
     else
     {
-        uint8_t rvl_trap_insn[4];
-        target_buffer_set_u32(target, rvl_trap_insn, RV_EBREAK_INSTR);
+        uint32_t rvl_trap_insn = RV_EBREAK_INSTR;
+        //target_buffer_set_u32(target, rvl_trap_insn, RV_EBREAK_INSTR);
         retval = du_core->rl_jtag_write_memory(&rvl->jtag,
                         breakpoint->address,
                         4,
                         1,
-                        rvl_trap_insn);
+                        (uint8_t*)&rvl_trap_insn);
     }
-
-
-	if (retval != ERROR_OK) {
-		LOG_ERROR("Error while writing RV_EBREAK_INSTR at 0x%08" TARGET_PRIxADDR,
-			   breakpoint->address);
-		return retval;
-	}
 
     // TODO: Add instruction cache invalidation
 	/* invalidate instruction cache */
@@ -979,7 +972,7 @@ static int rvl_remove_breakpoint(struct target *target,
         return ERROR_FAIL;
     }
 
-    if(breakpoint->length != 2 || breakpoint->length != 4)
+    if(breakpoint->length != 2 && breakpoint->length != 4)
     {
         LOG_ERROR("Breakpoint unsupported length\n");
         return ERROR_FAIL;
@@ -1003,7 +996,6 @@ static int rvl_remove_breakpoint(struct target *target,
                         1,
                         breakpoint->orig_instr);
     }
-
 
 
 	if (retval != ERROR_OK) {
@@ -1339,6 +1331,8 @@ static int rvl_soc_test_cpu(struct target *target)
     uint32_t illIns = 0x00000000;    
     uint32_t address;
     uint32_t r1, npc, ppc;
+    int state;
+    //uint32_t insRead;
 
     struct rvl_common *rvl = target_to_rvl(target);
     struct rl_du *du_core = rl_jtag_to_du(&rvl->jtag);
@@ -1435,13 +1429,12 @@ static int rvl_soc_test_cpu(struct target *target)
 
         do
         {
-            if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_DBG), 1, &r1) != ERROR_OK)
-            {
-                printf("Error: cannot set NPC\n");
+            if (rl_is_cpu_running(target, &state) != ERROR_OK) {
+                LOG_ERROR("Error while calling rl_is_cpu_running");
                 return ERROR_FAIL;
-            } 
+            }
             
-        } while(!(r1 & 1));
+        } while(!state);
 
         printf("Got breakpoint \n");
     }
@@ -1473,7 +1466,66 @@ static int rvl_soc_test_cpu(struct target *target)
 
     printf("Passed test 2\n");
 
+    /*
+     * Test 3
+     */
+    printf("- Test 3, Breakpoint hit\n");
 
+    struct breakpoint testBreakPoint = {0};
+
+    testBreakPoint.type = BKPT_SOFT;
+    testBreakPoint.address = (baseAddress + 0x24);
+    testBreakPoint.length = 4;
+
+    printf("Add breakpoint\n");
+    rvl_add_breakpoint(target, &testBreakPoint);
+
+
+    if(rvl_poll(target) != ERROR_OK)
+    {
+        printf("Error while polling target\n");
+        return ERROR_FAIL;
+    }
+
+    printf("Resuming target\n");
+    rvl_resume(target,1, 0, 0, 0);    
+    
+    do
+    {
+        if (rl_is_cpu_running(target, &state) != ERROR_OK) {
+            LOG_ERROR("Error while calling rl_is_cpu_running");
+            return ERROR_FAIL;
+        }
+        
+    } while(!state);
+
+    printf("Remove breakpoint\n");
+    rvl_remove_breakpoint(target, &testBreakPoint);
+
+        if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_GPRS + 0x200), 1, &npc) != ERROR_OK)
+    {
+        printf("Error: cannot read NPC\n");
+        return ERROR_FAIL;
+    }
+
+    if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_GPRS + 0x201), 1, &ppc) != ERROR_OK)
+    {
+        printf("Error: cannot read PPC\n");
+        return ERROR_FAIL;
+    }
+
+    if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_RF   +  1), 1, &r1) != ERROR_OK)
+    {
+        printf("Error: cannot read PPC\n");
+        return ERROR_FAIL;
+    }
+    printf("Read:     npc: %08x, ppc: %08x, r1: %08x\n", npc, ppc, r1);
+    printf("Expected: npc: %08x, ppc: %08x, r1: %08x\n", 0x00010010, 0x00010028, 8);
+
+    if(npc != 0x00010010 || ppc !=  0x00010028 || r1 != 8)
+    {
+        return ERROR_FAIL;
+    }
 
 
     return ERROR_OK;
