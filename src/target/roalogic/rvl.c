@@ -34,40 +34,6 @@
 #include "rvl.h"
 #include "rl_dbg_adv.h"
 
-// DBG CTRL
-//Bit definitions
-#define DBG_CTRL_SINGLE_STEP_TRACE	0x01       /* Enable single-step trace                        */
-#define DBG_CTRL_BRANCH_TRACE		0x02       /* Enable branch-trace                             */
-
-#define DBG_HIT_SINGLE_STEP		0x01       /* Single-Step caused breakpoint                   */
-#define DBG_HIT_BRANCH			0x02       /* Branch-trace caused breakpoint                  */
-#define DBG_HIT_BP(N)			(0x10 <<N) /* BreakPoint(n) caused breakpoint             */
-#define DBG_HIT_MASK			0xFF3      /* Masks all HIT bits                              */
-#define DBG_HIT_BP_MASK			0xFF0      /* Masks all BP HIT bits                           */
-
-#define DBG_BPCTRL_IMPLEMENTED		0x01
-#define DBG_BPCTRL_ENABLED		0x02
-#define DBG_BPCTRL_CC_INST_FETCH	(0x0 << 4)
-#define DBG_BPCTRL_CC_LD_ADR 		(0x1 << 4)
-#define DBG_BPCTRL_CC_ST_ADR		(0x2 << 4)
-#define DBG_BPCTRL_CC_LDST_ADR		(0x3 << 4)
-#define DBG_BPCTRL_CC_MASK              (0x7 << 4)
-
-#define DBG_IE_INST_MISALIGNED		0x00001
-#define DBG_IE_INST_ACCESS_FAULT	0x00002
-#define DBG_IE_ILLEGAL			0x00004
-#define DBG_IE_BREAKPOINT		0x00008
-#define DBG_IE_LOAD_MISALIGNED		0x00010
-#define DBG_IE_LOAD_ACCESS_FAULT	0x00020
-#define DBG_IE_AMO_MISALIGNED		0x00040
-#define DBG_IE_STORE_ACCESS_FAULT	0x00080
-#define DBG_IE_UMODE_ECALL		0x00100
-#define DBG_IE_SMODE_ECALL		0x00200
-#define DBG_IE_HMODE_ECALL		0x00400
-#define DBG_IE_MMODE_ECALL		0x00800
-#define DBG_IE_SOFTWARE_INT		0x10000
-#define DBG_IE_TIMER_INT		0x20000
-#define DBG_IE_UART			0x40000
 
 
 LIST_HEAD(rl_tap_list);
@@ -342,7 +308,7 @@ static int rvl_restore_context(struct target *target)
             {
 				retval = du_core->rl_jtag_write_cpu(&rvl->jtag,
                         // Write the PC to the NPC reg
-						(GROUP_GPRS + 0x201), 1,
+						(GROUP_GPRS + 0x200), 1,
 						&rvl->core_regs[i]);
 				if (retval != ERROR_OK) 
                 {
@@ -750,18 +716,20 @@ static int rvl_soft_reset_halt(struct target *target)
 	return ERROR_OK;
 }
 
-static bool is_any_soft_breakpoint(struct target *target)
-{
-	struct breakpoint *breakpoint = target->breakpoints;
+// static bool is_any_soft_breakpoint(struct target *target)
+// {
+// 	struct breakpoint *breakpoint = target->breakpoints;
 
-	LOG_DEBUG("-");
+// 	LOG_DEBUG("-");
 
-	while (breakpoint)
-		if (breakpoint->type == BKPT_SOFT)
-			return true;
+// 	while (breakpoint)
+// 		if (breakpoint->type == BKPT_SOFT)
+// 			return true;
 
-	return false;
-}
+// 	return false;
+// }
+
+//static int rvl_
 
 static int rvl_resume_or_step(struct target *target, int current,
 			       uint32_t address, int handle_breakpoints,
@@ -771,7 +739,8 @@ static int rvl_resume_or_step(struct target *target, int current,
 	struct rl_du *du_core = rl_to_du(rvl);
 	struct breakpoint *breakpoint = NULL;
 	uint32_t resume_pc = 0;
-	uint32_t debug_reg_list[RVL_DEBUG_REG_NUM];
+    uint32_t tempReg = 0;
+    int retval;
 
 	LOG_DEBUG("Addr: 0x%" PRIx32 ", stepping: %s, handle breakpoints %s\n",
 		  address, step ? "yes" : "no", handle_breakpoints ? "yes" : "no");
@@ -781,56 +750,55 @@ static int rvl_resume_or_step(struct target *target, int current,
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
+    // Free memory
 	if (!debug_execution)
 		target_free_all_working_areas(target);
 
 	/* current ? continue on current pc : continue at <address> */
 	if (!current)
-		buf_set_u32(rvl->core_cache->reg_list[GDB_REGNO_PC].value, 0, 32, address);
+    {
+        buf_set_u32(rvl->core_cache->reg_list[GDB_REGNO_PC].value, 0, 32, address);
+        retval = rvl_restore_context(target);
+        if (retval != ERROR_OK) {
+            LOG_ERROR("Error while calling rvl_restore_context");
+            return retval;
+        }
+    }
+       
+    // Clear DBG HIT reg
+    tempReg = 0;
 
-	int retval = rvl_restore_context(target);
-	if (retval != ERROR_OK) {
-		LOG_ERROR("Error while calling rvl_restore_context");
-		return retval;
-	}
+    if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_DBG + 0x01), 1, &tempReg) != ERROR_OK)
+    {
+        printf("Error: cannot clear HIT reg\n");
+        return ERROR_FAIL;
+    }
 
-	/* read debug registers (starting from DMR1 register) */
-	retval = du_core->rl_jtag_read_cpu(&rvl->jtag, RVL_DEBUG_REG_CTRL,
-					     RVL_DEBUG_REG_NUM, debug_reg_list);
-	if (retval != ERROR_OK) {
-		LOG_ERROR("Error while reading debug registers");
-		return retval;
-	}
+    if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_DBG + 0x00), 1, &tempReg) != ERROR_OK)
+    {
+        printf("Error: cannot read DBG ctrl reg\n");
+        return ERROR_FAIL;
+    }
 
-	/* Clear Debug Reason Register (DRR) */
-//	debug_reg_list[RVL_DEBUG_REG_CAUSE] = 0;
-
-	/* Clear watchpoint break generation in Debug Mode Register 2 (DMR2) */
-//	debug_reg_list[OR1K_DEBUG_REG_DMR2] &= ~OR1K_DMR2_WGB;
-//	if (step)
+	if (step)
+    {
 		/* Set the single step trigger in Debug Mode Register 1 (DMR1) */
-//		debug_reg_list[RVL_DEBUG_REG_CTRL] |= OR1K_DMR1_ST | OR1K_DMR1_BT;
-//	else
-		/* Clear the single step trigger in Debug Mode Register 1 (DMR1) */
-//		debug_reg_list[RVL_DEBUG_REG_CTRL] &= ~(OR1K_DMR1_ST | OR1K_DMR1_BT);
+		tempReg |= DBG_CTRL_SINGLE_STEP_TRACE;
+    }
+    else
+    {
+    	/* Clear the single step trigger in Debug Mode Register 1 (DMR1) */
+		tempReg &= ~DBG_CTRL_SINGLE_STEP_TRACE;
+    }
 
-	/* Set traps to be handled by the debug unit in the Debug Stop
-	   Register (DSR). Check if we have any software breakpoints in
-	   place before setting this value - the kernel, for instance,
-	   relies on l.trap instructions not stalling the processor ! */
-	if (is_any_soft_breakpoint(target) == true)
-//		debug_reg_list[OR1K_DEBUG_REG_DSR] |= OR1K_DSR_TE;
+    if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_DBG + 0x00), 1, &tempReg) != ERROR_OK)
+    {
+        printf("Error: cannot write DBG ctrl reg\n");
+        return ERROR_FAIL;
+    }
 
-	/* Write debug registers (starting from DMR1 register) */
-//	retval = du_core->rl_jtag_write_cpu(&rvl->jtag, OR1K_DMR1_CPU_REG_ADD, OR1K_DEBUG_REG_NUM, debug_reg_list);
 
-//	if (retval != ERROR_OK) 
-//    {
-//		LOG_ERROR("Error while writing back debug registers");
-//		return retval;
-//	}
-
-	resume_pc = buf_get_u32(rvl->core_cache->reg_list[0].value, 0, 32);
+	resume_pc = buf_get_u32(rvl->core_cache->reg_list[GDB_REGNO_PC].value, 0, 32);
 
 	/* The front-end may request us not to handle breakpoints */
 	if (handle_breakpoints) 
@@ -901,21 +869,44 @@ static int rvl_add_breakpoint(struct target *target,
 	struct rvl_common *rvl = target_to_rvl(target);
 	struct rl_du *du_core = rl_to_du(rvl);
 	uint8_t data;
+    int retval;
 
 	LOG_DEBUG("Adding breakpoint: addr 0x%08" TARGET_PRIxADDR ", len %d, type %d, set: %d, id: %" PRIu32,
 		  breakpoint->address, breakpoint->length, breakpoint->type,
 		  breakpoint->set, breakpoint->unique_id);
 
-	/* Only support SW breakpoints for now. */
-	if (breakpoint->type == BKPT_HARD)
-		LOG_ERROR("HW breakpoints not supported for now. Doing SW breakpoint.");
+    /* Only support SW breakpoints for now. */
+    if(breakpoint->type != BKPT_SOFT)
+    {
+        LOG_ERROR("HW breakpoints not supported for now\n");
+        return ERROR_FAIL;
+    }
 
-	/* Read and save the instruction */
-	int retval = du_core->rl_jtag_read_memory(&rvl->jtag,
-					 breakpoint->address,
-					 4,
-					 1,
-					 &data);
+    if(breakpoint->length != 2 || breakpoint->length != 4)
+    {
+        LOG_ERROR("Breakpoint unsupported length\n");
+        return ERROR_FAIL;
+    }
+	
+
+    if(breakpoint->length == 2)
+    {
+        /* Read and save the instruction */
+        retval = du_core->rl_jtag_read_memory(&rvl->jtag,
+                        breakpoint->address,
+                        2,
+                        1,
+                        &data);
+    }
+    else
+    {
+        /* Read and save the instruction */
+        retval = du_core->rl_jtag_read_memory(&rvl->jtag,
+                        breakpoint->address,
+                        4,
+                        1,
+                        &data);
+    }
 
 	if (retval != ERROR_OK) 
     {
@@ -929,15 +920,27 @@ static int rvl_add_breakpoint(struct target *target,
 	breakpoint->orig_instr = malloc(breakpoint->length);
 	memcpy(breakpoint->orig_instr, &data, breakpoint->length);
 
-	/* Sub in the OR1K trap instruction */
-    // Add check for 16 bit instruction, at that point the 16 bit ebreak must be placed
-	uint8_t rvl_trap_insn[4];
-	target_buffer_set_u32(target, rvl_trap_insn, RV_EBREAK_INSTR);
-	retval = du_core->rl_jtag_write_memory(&rvl->jtag,
-					  breakpoint->address,
-					  4,
-					  1,
-					  rvl_trap_insn);
+    if(breakpoint->length == 2)
+    {
+        uint8_t rvl_trap_insn[2];
+        target_buffer_set_u32(target, rvl_trap_insn, RV_EBREAK16_INSTR);
+        retval = du_core->rl_jtag_write_memory(&rvl->jtag,
+                        breakpoint->address,
+                        2,
+                        1,
+                        rvl_trap_insn);
+    }
+    else
+    {
+        uint8_t rvl_trap_insn[4];
+        target_buffer_set_u32(target, rvl_trap_insn, RV_EBREAK_INSTR);
+        retval = du_core->rl_jtag_write_memory(&rvl->jtag,
+                        breakpoint->address,
+                        4,
+                        1,
+                        rvl_trap_insn);
+    }
+
 
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while writing RV_EBREAK_INSTR at 0x%08" TARGET_PRIxADDR,
@@ -963,27 +966,53 @@ static int rvl_remove_breakpoint(struct target *target,
 {
 	struct rvl_common *rvl = target_to_rvl(target);
 	struct rl_du *du_core = rl_to_du(rvl);
+    int retval;
 
 	LOG_DEBUG("Removing breakpoint: addr 0x%08" TARGET_PRIxADDR ", len %d, type %d, set: %d, id: %" PRIu32,
 		  breakpoint->address, breakpoint->length, breakpoint->type,
 		  breakpoint->set, breakpoint->unique_id);
 
-	/* Only support SW breakpoints for now. */
-	if (breakpoint->type == BKPT_HARD)
-		LOG_ERROR("HW breakpoints not supported for now. Doing SW breakpoint.");
+    /* Only support SW breakpoints for now. */
+    if(breakpoint->type != BKPT_SOFT)
+    {
+        LOG_ERROR("HW breakpoints not supported for now\n");
+        return ERROR_FAIL;
+    }
 
-	/* Replace the removed instruction */
-	int retval = du_core->rl_jtag_write_memory(&rvl->jtag,
-					  breakpoint->address,
-					  4,
-					  1,
-					  breakpoint->orig_instr);
+    if(breakpoint->length != 2 || breakpoint->length != 4)
+    {
+        LOG_ERROR("Breakpoint unsupported length\n");
+        return ERROR_FAIL;
+    }
+
+    if(breakpoint->length == 2)
+    {
+        /* Replace the removed instruction */
+        retval = du_core->rl_jtag_write_memory(&rvl->jtag,
+                        breakpoint->address,
+                        2,
+                        1,
+                        breakpoint->orig_instr);
+    }
+    else
+    {
+        /* Replace the removed instruction */
+        retval = du_core->rl_jtag_write_memory(&rvl->jtag,
+                        breakpoint->address,
+                        4,
+                        1,
+                        breakpoint->orig_instr);
+    }
+
+
 
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while writing back the instruction at 0x%08" TARGET_PRIxADDR,
 			   breakpoint->address);
 		return retval;
 	}
+
+    
 
     // TODO: Add instruction cache invalidation
 	/* invalidate instruction cache */
@@ -1265,6 +1294,7 @@ static int rvl_soc_test_sram(struct target *target)
     if(rvl_poll(target) != ERROR_OK)
     {
         printf("Error while polling target\n");
+        return ERROR_FAIL;
     }
 
     for(int i = 0; i < 9; i++)
@@ -1308,9 +1338,10 @@ static int rvl_soc_test_cpu(struct target *target)
     uint32_t insn[11];
     uint32_t illIns = 0x00000000;    
     uint32_t address;
-    //uint32_t r1;
+    uint32_t r1;
 
     struct rvl_common *rvl = target_to_rvl(target);
+    struct rl_du *du_core = rl_jtag_to_du(&rvl->jtag);
 
     printf("\n-- Testing RVL-SoC CPU\n");
     printf("writing instructions\n");
@@ -1377,25 +1408,52 @@ static int rvl_soc_test_cpu(struct target *target)
     /*
      * Test 2
      */
-    //printf("- Test 2, Single stepping\n");
-    //if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_DBG  +  0x00) /* CTRL */, 1, (uint8_t*)&r1) != ERROR_OK)
-    //{
-    //   printf("Error: cannot read DBG ctrl");
-    //    return ERROR_FAIL;
-    // }
+    printf("- Test 2, Single stepping\n");
 
-    //r1 |= DBG_CTRL_SINGLE_STEP_TRACE;
-    //if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_DBG  +  0x00) /* CTRL */, 1, (uint8_t*)&r1) != ERROR_OK)
-    //{
-    //    printf("Error: cannot read DBG ctrl");
-    //    return ERROR_FAIL;
-    //}
+    printf("Write NPC: %08x\n", baseAddress);
+    if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_GPRS + 0x200), 1, &baseAddress) != ERROR_OK)
+    {
+        printf("Error: cannot set NPC\n");
+        return ERROR_FAIL;
+    }
 
+    for(int i = 0; i < 11; i++)
+    {
+        if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_GPRS + 0x200), 1, &r1) != ERROR_OK)
+        {
+            printf("Error: cannot set NPC\n");
+            return ERROR_FAIL;
+        } 
+            
+        if(rvl_poll(target) != ERROR_OK)
+        {
+            printf("Error while polling target\n");
+            return ERROR_FAIL;
+        }
+
+        printf("Starting CPU, waiting for breakpoint... \n");
+
+        if(rvl_step(target, 1, 0x00, 0) != ERROR_OK)
+        {
+            printf("Error: stepping\n");
+            return ERROR_FAIL;
+        }
+
+        do
+        {
+            if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_DBG), 1, &r1) != ERROR_OK)
+            {
+                printf("Error: cannot set NPC\n");
+                return ERROR_FAIL;
+            } 
+            
+        } while(!(r1 & 1));
+
+        printf("Got breakpoint \n");
+    }
 
 
     return ERROR_OK;
-
-
 }
 
 COMMAND_HANDLER(rl_tap_select_command_handler)
@@ -1558,15 +1616,20 @@ COMMAND_HANDLER(rvl_test_handler)
     }
 
     if((options & 0x00000002) > 0)
-    {
-        rvl_soc_test_cpu(target);
+    {      
+        if(rvl_soc_test_cpu(target) == ERROR_OK)
+        {
+            printf("Success: CPU test Passed\n");
+        }
+        else
+        {
+            printf("Error: CPU test failed!\n");
+            return ERROR_FAIL;
+        }
     }
 
 
-
-
-
-
+    printf("Succesfully passed given tests\n");
 
     return ERROR_OK;
 }

@@ -206,6 +206,7 @@ struct rvl_core_reg_init {
 
 /* RISC-V EBREAK instruction */
 #define RV_EBREAK_INSTR  0x00100073
+#define RV_EBREAK16_INSTR 0x9002
 
 enum rvl_debug_reg_nums {
 	RVL_DEBUG_REG_CTRL = 0,
@@ -217,23 +218,49 @@ enum rvl_debug_reg_nums {
 	RVL_DEBUG_REG_BPCTRL1,
 	RVL_DEBUG_REG_BPDATA1,
 	RVL_DEBUG_REG_BPCTRL2,
-	RVL_DEBUG_REG_BPDATA2,
-	RVL_DEBUG_REG_BPCTRL3,
-	RVL_DEBUG_REG_BPDATA3,
-	RVL_DEBUG_REG_BPCTRL4,
-	RVL_DEBUG_REG_BPDATA4,
-    RVL_DEBUG_REG_NUM
+	RVL_DEBUG_REG_BPDATA2
 };
+
+#define RVL_JTAG_DBG_REGS 10
 
 #define NO_SINGLE_STEP		0
 #define SINGLE_STEP		1
 
-/* OR1K Debug registers and bits needed for resuming */
-#define OR1K_DEBUG_REG_BASE	GROUP6                     /* Debug registers Base address */
-#define OR1K_DMR1_CPU_REG_ADD	(OR1K_DEBUG_REG_BASE + 16) /* Debug Mode Register 1 0x3010 */
-#define OR1K_DMR1_ST		0x00400000                 /* Single-step trace */
-#define OR1K_DMR1_BT		0x00800000                 /* Branch trace */
-#define OR1K_DMR2_WGB		0x003ff000                 /* Watchpoints generating breakpoint */
-#define OR1K_DSR_TE		0x00002000                 /* Trap exception */
+
+// DBG CTRL
+//Bit definitions
+#define DBG_CTRL_SINGLE_STEP_TRACE	0x01       /* Enable single-step trace                        */
+#define DBG_CTRL_BRANCH_TRACE		0x02       /* Enable branch-trace                             */
+
+//#define DBG_HIT_SINGLE_STEP		0x01       /* Single-Step caused breakpoint                   */
+//#define DBG_HIT_BRANCH			0x02       /* Branch-trace caused breakpoint                  */
+//#define DBG_HIT_BP(N)			(0x10 <<N) /* BreakPoint(n) caused breakpoint             */
+//#define DBG_HIT_MASK			0xFF3      /* Masks all HIT bits                              */
+//#define DBG_HIT_BP_MASK			0xFF0      /* Masks all BP HIT bits                           */
+
+//#define DBG_BPCTRL_IMPLEMENTED		0x01
+//#define DBG_BPCTRL_ENABLED		0x02
+//#define DBG_BPCTRL_CC_INST_FETCH	(0x0 << 4)
+//#define DBG_BPCTRL_CC_LD_ADR 		(0x1 << 4)
+//#define DBG_BPCTRL_CC_ST_ADR		(0x2 << 4)
+//#define DBG_BPCTRL_CC_LDST_ADR		(0x3 << 4)
+//#define DBG_BPCTRL_CC_MASK              (0x7 << 4)
+
+#define DBG_IE_INST_MISALIGNED		0x00001
+#define DBG_IE_INST_ACCESS_FAULT	0x00002
+#define DBG_IE_ILLEGAL			0x00004
+#define DBG_IE_BREAKPOINT		0x00008
+#define DBG_IE_LOAD_MISALIGNED		0x00010
+#define DBG_IE_LOAD_ACCESS_FAULT	0x00020
+#define DBG_IE_AMO_MISALIGNED		0x00040
+#define DBG_IE_STORE_ACCESS_FAULT	0x00080
+#define DBG_IE_UMODE_ECALL		0x00100
+#define DBG_IE_SMODE_ECALL		0x00200
+#define DBG_IE_HMODE_ECALL		0x00400
+#define DBG_IE_MMODE_ECALL		0x00800
+#define DBG_IE_SOFTWARE_INT		0x10000
+#define DBG_IE_TIMER_INT		0x20000
+#define DBG_IE_UART			0x40000
+
 
 #endif /* OPENOCD_TARGET_ROALOGIC_RVL_H */

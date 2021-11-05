@@ -35,6 +35,9 @@ static struct rl_du rl_dbg_adv;
 
 static const char * const chain_name[] = {"SYSBUS", "CPU", "JSP"};
 
+static int rl_adv_jtag_write_cpu(struct rl_jtag *jtag_info,
+		uint32_t addr, int count, const uint32_t *value);
+
 static uint32_t adbg_compute_crc(uint32_t crc, uint32_t data_in,
 				 int length_bits)
 {
@@ -72,6 +75,7 @@ static int find_status_bit(void *_buf, int len)
 static int rl_adv_jtag_init(struct rl_jtag *jtag_info)
 {
 	struct rl_tap_ip *tap_ip = jtag_info->tap_ip;
+    uint32_t value = 0;
 
 	int retval = tap_ip->init(jtag_info);
 	if (retval != ERROR_OK) {
@@ -83,7 +87,7 @@ static int rl_adv_jtag_init(struct rl_jtag *jtag_info)
 	jtag_info->rl_jtag_inited = 1;
 
 	/* TODO hardcoded HW parameters */
-        jtag_info->rl_jtag_address_size = 32;
+    jtag_info->rl_jtag_address_size = 32;
 //	jtag_info->cpu_size = 4;
 	jtag_info->rl_jtag_cpu_selected = 0;
 	
@@ -106,6 +110,15 @@ static int rl_adv_jtag_init(struct rl_jtag *jtag_info)
 			return retval;
 		}
 	}
+
+    value |= DBG_IE_INST_MISALIGNED | DBG_IE_ILLEGAL | DBG_IE_BREAKPOINT | DBG_IE_LOAD_MISALIGNED | DBG_IE_AMO_MISALIGNED;
+
+    printf("Set DBG IE with value: %08x\n", value);
+    if(rl_adv_jtag_write_cpu(jtag_info, (GROUP_DBG + 0x02), 1, &value) != ERROR_OK)
+    {
+        printf("Error: cannot set DBG IE reg\n");
+        return ERROR_FAIL;
+    }
 
 	LOG_DEBUG("Init done");
 

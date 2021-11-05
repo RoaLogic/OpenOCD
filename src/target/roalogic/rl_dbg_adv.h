@@ -170,7 +170,7 @@ struct rl_du {
 	int (*rl_cpu_stall)(struct rl_jtag *jtag_info, int action);
 
 	int (*rl_cpu_reset)(struct rl_jtag *jtag_info, int action);
-
+    
 	int (*rl_jtag_read_cpu)(struct rl_jtag *jtag_info,
 				uint32_t addr, int count, uint32_t *value);
 
