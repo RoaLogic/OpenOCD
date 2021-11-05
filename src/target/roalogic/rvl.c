@@ -1254,6 +1254,7 @@ static int rvl_soc_test_sram(struct target *target)
 {
     uint32_t ins;
     uint32_t insn[9];
+    uint32_t address;
 
     insn[0] = 0x11112222;
     insn[1] = 0x33334444;
@@ -1265,22 +1266,26 @@ static int rvl_soc_test_sram(struct target *target)
     insn[7] = 0xffff0000;
     insn[8] = 0xdedababa;
 
-    for(int i = SRAM_BASE; i < SRAM_BASE+0x24; i = i+4)
+    for(int i = 0; i < 9; i++)
     {
-        if(rvl_write_memory(target, i, 4, 1, (uint8_t*)&insn[i]) !=ERROR_OK)
+        address = SRAM_BASE + (i * 4);
+
+        if(rvl_write_memory(target, address, 4, 1, (uint8_t*)&insn[i]) !=ERROR_OK)
         {
             printf("Error: Cannot write memory\n");
             return ERROR_FAIL;
         } 
     }
 
-    for(int i = SRAM_BASE; i < SRAM_BASE+0x24; i = i+4)
+    for(int i = 0; i < 9; i++)
     {
-        if(rvl_read_memory(target, i, 4, 1, &ins) == ERROR_OK)
+        address = SRAM_BASE + (i * 4);
+
+        if(rvl_read_memory(target, i, 4, 1, (uint8_t*)&ins) == ERROR_OK)
         {
             if(ins != insn[i])
             {
-                printf("Error: Expected: %08x, received: 08x", insn[i], ins);
+                printf("Error: Expected: %08x, received: %08x", insn[i], ins);
             }
         }
         else
@@ -1297,7 +1302,8 @@ static int rvl_soc_test_cpu(struct target *target)
 {
     uint32_t insn[11];
     uint32_t illIns = 0x00000000;
-    uint32_t r1;
+    uint32_t address;
+    //uint32_t r1;
 
     printf("\n-- Testing RVL-SoC CPU\n");
     printf("writing instructions\n");
@@ -1315,9 +1321,10 @@ static int rvl_soc_test_cpu(struct target *target)
     insn[10] = 0xfe9ff06f; /* j     (base+0x10)            */
 
 
-    for(int i = SRAM_BASE; i < SRAM_BASE+0x25; i = i+4)
+    for(int i = 0; i < 11; i++)
     {
-        if(rvl_write_memory(target, i, 4, 1, (uint8_t*)&insn[i]) !=ERROR_OK)
+        address = SRAM_BASE + (i * 4);
+        if(rvl_write_memory(target, address, 4, 1, (uint8_t*)&insn[i]) !=ERROR_OK)
         {
             printf("Error: Cannot write memory\n");
             return ERROR_FAIL;
@@ -1325,7 +1332,7 @@ static int rvl_soc_test_cpu(struct target *target)
     }
 
     //Fill rest of memory with 0x00 (C.ILLEGAL). Avoid CPU going nuts on 0xxxxxx
-    for (i = SRAM_BASE+0x2c; i < SRAM_BASE+0x4c; i=i+4)
+    for (int i = SRAM_BASE+0x2c; i < SRAM_BASE+0x4c; i=i+4)
     {
         if(rvl_write_memory(target, i, 4, 1, (uint8_t*)&illIns) !=ERROR_OK)
         {
@@ -1355,22 +1362,22 @@ static int rvl_soc_test_cpu(struct target *target)
      * Test 2
      */
     printf("- Test 2, Single stepping\n");
-    if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_DBG  +  0x00) /* CTRL */, 1, &r1) != ERROR_OK)
-    {
-        printf("Error: cannot read DBG ctrl");
-        return ERROR_FAIL;
-    }
+    //if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_DBG  +  0x00) /* CTRL */, 1, (uint8_t*)&r1) != ERROR_OK)
+    //{
+    //   printf("Error: cannot read DBG ctrl");
+    //    return ERROR_FAIL;
+    // }
 
-    r1 |= DBG_CTRL_SINGLE_STEP_TRACE;
-    if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_DBG  +  0x00) /* CTRL */, 1, &r1) != ERROR_OK)
-    {
-        printf("Error: cannot read DBG ctrl");
-        return ERROR_FAIL;
-    }
-
-
+    //r1 |= DBG_CTRL_SINGLE_STEP_TRACE;
+    //if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_DBG  +  0x00) /* CTRL */, 1, (uint8_t*)&r1) != ERROR_OK)
+    //{
+    //    printf("Error: cannot read DBG ctrl");
+    //    return ERROR_FAIL;
+    //}
 
 
+
+    return ERROR_OK;
 
 
 }
@@ -1532,6 +1539,10 @@ COMMAND_HANDLER(rvl_test_handler)
         printf("\n RVL SoC SRAM test disabled\n");
     }
 
+    if((options & 0x00000002) > 0)
+    {
+        rvl_soc_test_cpu(target);
+    }
 
 
 
