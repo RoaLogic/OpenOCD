@@ -86,7 +86,7 @@ static const struct rvl_core_reg_init rvl_init_reg_list[] = {
 
 
 	/* PC */
-        {"pc",            GROUP_GPRS + 0x200,          "org.gnu.gdb.rvl.dbg",   NULL},
+        {"pc",            GROUP_GPRS + 0x201,          "org.gnu.gdb.rvl.dbg",   NULL},
 
 
 	/* Floating Point Register File */
@@ -170,7 +170,7 @@ static const struct rvl_core_reg_init rvl_init_reg_list[] = {
 
 
 	/* Debug Unit Internals */
-	{"npc",           GROUP_GPRS + 0x201,          "org.gnu.gdb.rvl.dbg", NULL},
+	{"npc",           GROUP_GPRS + 0x200,          "org.gnu.gdb.rvl.dbg", NULL},
 	{"dbgctrl",       GROUP_DBG  +  0x00,          "org.gnu.gdb.rvl.dbg", NULL},
 	{"dbghit",        GROUP_DBG  +  0x01,          "org.gnu.gdb.rvl.dbg", NULL},
 	{"dbgie",         GROUP_DBG  +  0x02,          "org.gnu.gdb.rvl.dbg", NULL},
@@ -308,7 +308,7 @@ static int rvl_restore_context(struct target *target)
             {
 				retval = du_core->rl_jtag_write_cpu(&rvl->jtag,
                         // Write the PC to the NPC reg
-						(GROUP_GPRS + 0x200), 1,
+						(GROUP_GPRS + 0x201), 1,
 						&rvl->core_regs[i]);
 				if (retval != ERROR_OK) 
                 {
@@ -1334,11 +1334,11 @@ static int rvl_soc_test_sram(struct target *target)
 
 static int rvl_soc_test_cpu(struct target *target)
 {
-    uint32_t baseAddress = 0x00000000;
+    uint32_t baseAddress = 0x00010000;
     uint32_t insn[11];
     uint32_t illIns = 0x00000000;    
     uint32_t address;
-    uint32_t r1;
+    uint32_t r1, npc, ppc;
 
     struct rvl_common *rvl = target_to_rvl(target);
     struct rl_du *du_core = rl_jtag_to_du(&rvl->jtag);
@@ -1418,13 +1418,7 @@ static int rvl_soc_test_cpu(struct target *target)
     }
 
     for(int i = 0; i < 11; i++)
-    {
-        if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_GPRS + 0x200), 1, &r1) != ERROR_OK)
-        {
-            printf("Error: cannot set NPC\n");
-            return ERROR_FAIL;
-        } 
-            
+    {            
         if(rvl_poll(target) != ERROR_OK)
         {
             printf("Error while polling target\n");
@@ -1451,6 +1445,35 @@ static int rvl_soc_test_cpu(struct target *target)
 
         printf("Got breakpoint \n");
     }
+
+    if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_GPRS + 0x200), 1, &npc) != ERROR_OK)
+    {
+        printf("Error: cannot read NPC\n");
+        return ERROR_FAIL;
+    }
+
+    if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_GPRS + 0x201), 1, &ppc) != ERROR_OK)
+    {
+        printf("Error: cannot read PPC\n");
+        return ERROR_FAIL;
+    }
+
+    if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_RF   +  1), 1, &r1) != ERROR_OK)
+    {
+        printf("Error: cannot read PPC\n");
+        return ERROR_FAIL;
+    }
+    printf("Read:     npc: %08x, ppc: %08x, r1: %08x\n", npc, ppc, r1);
+    printf("Expected: npc: %08x, ppc: %08x, r1: %08x\n", 0x00010010, 0x00010028, 5);
+
+    if(npc != 0x00010010 || ppc !=  0x00010028 || r1 != 5)
+    {
+        return ERROR_FAIL;
+    }
+
+    printf("Passed test 2\n");
+
+
 
 
     return ERROR_OK;
