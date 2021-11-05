@@ -1480,10 +1480,106 @@ static int rvl_soc_test_cpu(struct target *target)
     printf("Add breakpoint\n");
     rvl_add_breakpoint(target, &testBreakPoint);
 
+    if(rvl_poll(target) != ERROR_OK)
+    {
+        printf("Error while polling target\n");
+        return ERROR_FAIL;
+    }
+
+    if(rvl_read_memory(target, (baseAddress + 0x24), 4, 1, (uint8_t*)&r1) !=ERROR_OK)
+    {
+        printf("Cannot read back memory!\n");
+        return ERROR_FAIL;
+    } 
+
+    if(r1 != RV_EBREAK_INSTR)
+    {
+        printf("SW breakpoint not set!\n");
+        return ERROR_FAIL;
+    }
+
+    printf("Resuming target\n");
+    rvl_resume(target,1, 0, 0, 0);    
+    
+    do
+    {
+        if (rl_is_cpu_running(target, &state) != ERROR_OK) {
+            LOG_ERROR("Error while calling rl_is_cpu_running");
+            return ERROR_FAIL;
+        }
+        
+    } while(!state);
+
+    printf("Remove breakpoint\n");
+    rvl_remove_breakpoint(target, &testBreakPoint);
 
     if(rvl_poll(target) != ERROR_OK)
     {
         printf("Error while polling target\n");
+        return ERROR_FAIL;
+    }
+
+    if(rvl_read_memory(target, (baseAddress + 0x24), 4, 1, (uint8_t*)&r1) != ERROR_OK)
+    {
+        printf("Cannot read back memory!\n");
+        return ERROR_FAIL;
+    }
+
+    if(r1 != insn[9])
+    {
+        printf("Breakpoing not removed: Expected: %08x, Received: %08x\n", insn[9], r1);
+        return ERROR_FAIL;
+    }
+
+    if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_GPRS + 0x200), 1, &npc) != ERROR_OK)
+    {
+        printf("Error: cannot read NPC\n");
+        return ERROR_FAIL;
+    }
+
+    if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_GPRS + 0x201), 1, &ppc) != ERROR_OK)
+    {
+        printf("Error: cannot read PPC\n");
+        return ERROR_FAIL;
+    }
+
+    if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_RF   +  1), 1, &r1) != ERROR_OK)
+    {
+        printf("Error: cannot read PPC\n");
+        return ERROR_FAIL;
+    }
+
+    printf("Read:     npc: %08x, ppc: %08x, r1: %08x\n", npc, ppc, r1);
+    printf("Expected: npc: %08x, ppc: %08x, r1: %08x\n", 0x00010028, 0x00010024, 8);
+
+    if(ppc !=  0x00010024 || r1 != 8)
+    {
+        return ERROR_FAIL;
+    }
+
+
+    printf("Passed test 3\n");
+
+    printf("- Test 4, Breakpoint hit2\n");
+
+    testBreakPoint.type = BKPT_SOFT;
+    testBreakPoint.address = (baseAddress + 0x28);
+    testBreakPoint.length = 4;
+
+    printf("Add breakpoint\n");
+    rvl_add_breakpoint(target, &testBreakPoint);
+
+    if(rvl_poll(target) != ERROR_OK)
+    {
+        printf("Error while polling target\n");
+        return ERROR_FAIL;
+    }
+
+    ppc = (baseAddress + 0x10);
+    printf("Write NPC: %08x\n", ppc);
+    if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_GPRS + 0x200), 1, &ppc) != ERROR_OK)
+    {
+        printf("Error: cannot set NPC\n");
         return ERROR_FAIL;
     }
 
@@ -1519,14 +1615,17 @@ static int rvl_soc_test_cpu(struct target *target)
         printf("Error: cannot read PPC\n");
         return ERROR_FAIL;
     }
-    printf("Read:     npc: %08x, ppc: %08x, r1: %08x\n", npc, ppc, r1);
-    printf("Expected: npc: %08x, ppc: %08x, r1: %08x\n", 0x00010010, 0x00010028, 8);
 
-    if(npc != 0x00010010 || ppc !=  0x00010028 || r1 != 8)
+    printf("Read:     npc: %08x, ppc: %08x, r1: %08x\n", npc, ppc, r1);
+    printf("Expected: npc: %08x, ppc: %08x, r1: %08x\n", 0x0001002C, 0x00010028, 21);
+
+    if(ppc !=  0x00010028 || r1 != 21)
     {
         return ERROR_FAIL;
     }
 
+
+    printf("Passed test 4\n");
 
     return ERROR_OK;
 }
