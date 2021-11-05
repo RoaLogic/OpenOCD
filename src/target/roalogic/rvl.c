@@ -1304,46 +1304,54 @@ static int rvl_soc_test_sram(struct target *target)
 
 static int rvl_soc_test_cpu(struct target *target)
 {
-    //uint32_t insn[11];
-    //uint32_t illIns = 0x00000000;
-    //uint32_t address;
+    uint32_t baseAddress = 0x00000000;
+    uint32_t insn[11];
+    uint32_t illIns = 0x00000000;    
+    uint32_t address;
     //uint32_t r1;
+
+    struct rvl_common *rvl = target_to_rvl(target);
 
     printf("\n-- Testing RVL-SoC CPU\n");
     printf("writing instructions\n");
 
-    // insn[0]  = 0x00004033; /* xor   x0,x0,x0               */
-    // insn[1]  = 0x00000093; /* addi  x1,x0,0x0              */
-    // insn[2]  = 0x00010137; /* lui   x2,0x00010  (RAM_BASE) */
-    // insn[3]  = 0x03016113; /* ori   x2,x2,0x30             */
-    // insn[4]  = 0x00108093; /* addi  x1,x1,1                */
-    // insn[5]  = 0x00108093; /* addi  x1,x1,1                */
-    // insn[6]  = 0x00112023; /* sw    0(x2),x1               */
-    // insn[7]  = 0x00108093; /* addi  x1,x1,1                */
-    // insn[8]  = 0x00012183; /* lw    x3,0(x2)               */
-    // insn[9]  = 0x003080b3; /* add   x1,x1,x3               */
-    // insn[10] = 0xfe9ff06f; /* j     (base+0x10)            */
+    insn[0]  = 0x00004033; /* xor   x0,x0,x0               */
+    insn[1]  = 0x00000093; /* addi  x1,x0,0x0              */
+    insn[2]  = 0x00010137; /* lui   x2,0x00010  (RAM_BASE) */
+    insn[3]  = 0x03016113; /* ori   x2,x2,0x30             */
+    insn[4]  = 0x00108093; /* addi  x1,x1,1                */
+    insn[5]  = 0x00108093; /* addi  x1,x1,1                */
+    insn[6]  = 0x00112023; /* sw    0(x2),x1               */
+    insn[7]  = 0x00108093; /* addi  x1,x1,1                */
+    insn[8]  = 0x00012183; /* lw    x3,0(x2)               */
+    insn[9]  = 0x003080b3; /* add   x1,x1,x3               */
+    insn[10] = 0xfe9ff06f; /* j     (base+0x10)            */
+
+    if(rvl_poll(target) != ERROR_OK)
+    {
+        printf("Error while polling target\n");
+    }
 
 
     for(int i = 0; i < 11; i++)
     {
-        // address = SRAM_BASE + (i * 4);
-        // if(rvl_write_memory(target, address, 4, 1, (uint8_t*)&insn[i]) !=ERROR_OK)
-        // {
-        //     printf("Error: Cannot write memory\n");
-        //     return ERROR_FAIL;
-        // } 
+        address = baseAddress + (i * 4);
+        if(rvl_write_memory(target, address, 4, 1, (uint8_t*)&insn[i]) !=ERROR_OK)
+        {
+            printf("Error: Cannot write memory\n");
+            return ERROR_FAIL;
+        } 
     }
 
     //Fill rest of memory with 0x00 (C.ILLEGAL). Avoid CPU going nuts on 0xxxxxx
-    // for (int i = SRAM_BASE+0x2c; i < SRAM_BASE+0x4c; i=i+4)
-    // {
-    //     // if(rvl_write_memory(target, i, 4, 1, (uint8_t*)&illIns) !=ERROR_OK)
-    //     // {
-    //     //     printf("Error: Cannot write memory\n");
-    //     //     return ERROR_FAIL;
-    //     // }
-    // }
+    for (uint32_t i = baseAddress+0x2c; i < baseAddress+0x4c; i=i+4)
+    {
+        if(rvl_write_memory(target, i, 4, 1, (uint8_t*)&illIns) !=ERROR_OK)
+        {
+            printf("Error: Cannot write memory\n");
+            return ERROR_FAIL;
+        }
+    }
 
     printf("Setting up CPU\n");
 
@@ -1354,18 +1362,22 @@ static int rvl_soc_test_cpu(struct target *target)
 
     if(rvl_save_context(target) == ERROR_OK)
     {
-        printf("Success: Saved context");
+        printf("Success: Saved context\n");
+        for (int i = 0; i < GDB_REGNO_FPR0; i++) 
+    	{
+            printf("reg: %s, value: %08x\n",rvl_init_reg_list[i].name, rvl->core_regs[i]);
+        }
     }
     else
     {
-        printf("Error: cannot save context");
+        printf("Error: cannot save context\n");
         return ERROR_FAIL;
     }
     
     /*
      * Test 2
      */
-    printf("- Test 2, Single stepping\n");
+    //printf("- Test 2, Single stepping\n");
     //if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_DBG  +  0x00) /* CTRL */, 1, (uint8_t*)&r1) != ERROR_OK)
     //{
     //   printf("Error: cannot read DBG ctrl");
