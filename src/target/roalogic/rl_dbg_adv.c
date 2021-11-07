@@ -758,7 +758,7 @@ static int rl_adv_cpu_stall(struct rl_jtag *jtag_info, int action)
 		return retval;
 
         //TODO: the '1' length should be number of CPUs
-	return adbg_ctrl_write(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 1);
+	return adbg_ctrl_write(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 2);
 }
 
 static int rl_adv_is_cpu_running(struct rl_jtag *jtag_info, int *running)

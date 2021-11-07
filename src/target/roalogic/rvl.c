@@ -681,7 +681,7 @@ static int rvl_assert_reset(struct target *target)
 	struct rvl_common *rvl = target_to_rvl(target);
 	struct rl_du *du_core = rl_to_du(rvl);
 
-	LOG_DEBUG("-");
+	LOG_DEBUG("Assert reset \n");
 
 	int retval = du_core->rl_cpu_reset(&rvl->jtag, CPU_RESET);
 
@@ -715,7 +715,7 @@ static int rvl_soft_reset_halt(struct target *target)
 	struct rvl_common *rvl = target_to_rvl(target);
 	struct rl_du *du_core = rl_to_du(rvl);
 
-	LOG_DEBUG("-");
+	LOG_DEBUG("Soft reset \n");
 
 	int retval = du_core->rl_cpu_stall(&rvl->jtag, CPU_STALL);
 
