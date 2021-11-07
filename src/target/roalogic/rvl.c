@@ -262,12 +262,13 @@ static int rvl_save_context(struct target *target)
 		{
 			// Read the PC for the PPC
 			if (i == GDB_REGNO_PC) 
-	    		{
+	    	{
 				// Read the PPC register
 				retval = du_core->rl_jtag_read_cpu(&rvl->jtag,
 						(GROUP_GPRS + 0x200), 1,
 						&rvl->core_regs[i]);
 
+                LOG_DEBUG("Read PC: Value: %08x\n", rvl->core_regs[i]);
 				if (retval != ERROR_OK)
 					return retval;
 			} 
@@ -308,7 +309,7 @@ static int rvl_restore_context(struct target *target)
             {
 				retval = du_core->rl_jtag_write_cpu(&rvl->jtag,
                         // Write the PC to the NPC reg
-						(GROUP_GPRS + 0x201), 1,
+						(GROUP_GPRS + 0x200), 1,
 						&rvl->core_regs[i]);
 				if (retval != ERROR_OK) 
                 {
@@ -409,12 +410,14 @@ static int rvl_set_core_reg(struct reg *reg, uint8_t *buf)
 	uint32_t value = buf_get_u32(buf, 0, 32);
 
 	LOG_DEBUG("-");
+    LOG_DEBUG("Set core reg: num: %u\n", rvl_reg->list_num);
 
 	if (target->state != TARGET_HALTED)
 		return ERROR_TARGET_NOT_HALTED;
 
 	if (rvl_reg->list_num < GDB_REGNO_COUNT) 
     {
+        
 		buf_set_u32(reg->value, 0, 32, value);
 		reg->dirty = true;
 		reg->valid = true;
@@ -486,6 +489,7 @@ static struct reg_cache *rvl_build_reg_cache(struct target *target)
 static int rvl_debug_entry(struct target *target)
 {
 	LOG_DEBUG("-");
+    uint32_t value = 0;
 
 	int retval = rvl_save_context(target);
 	if (retval != ERROR_OK) {
@@ -494,12 +498,24 @@ static int rvl_debug_entry(struct target *target)
 	}
 
 	struct rvl_common *rvl = target_to_rvl(target);
+    struct rl_du *du_core = rl_to_du(rvl);
 	uint32_t addr = rvl->core_regs[GDB_REGNO_PC];
 
+    value |= DBG_IE_INST_MISALIGNED | DBG_IE_ILLEGAL | DBG_IE_BREAKPOINT | DBG_IE_LOAD_MISALIGNED | DBG_IE_AMO_MISALIGNED;
+
+    // printf("Set DBG IE with value: %08x\n", value);
+    if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_DBG + 0x02), 1, &value) != ERROR_OK)
+    {
+        LOG_ERROR("Error: cannot set DBG IE reg\n");
+        return ERROR_FAIL;
+    }
+
 	if (breakpoint_find(target, addr))
+    {
 		/* Halted on a breakpoint, step back to permit executing the instruction there */
 		retval = rvl_set_core_reg(&rvl->core_cache->reg_list[GDB_REGNO_PC],
 					   (uint8_t *)&addr);
+    }
 
 	return retval;
 }
@@ -758,11 +774,13 @@ static int rvl_resume_or_step(struct target *target, int current,
 	if (!current)
     {
         buf_set_u32(rvl->core_cache->reg_list[GDB_REGNO_PC].value, 0, 32, address);
-        retval = rvl_restore_context(target);
-        if (retval != ERROR_OK) {
-            LOG_ERROR("Error while calling rvl_restore_context");
-            return retval;
-        }
+
+    }
+
+    retval = rvl_restore_context(target);
+    if (retval != ERROR_OK) {
+        LOG_ERROR("Error while calling rvl_restore_context");
+        return retval;
     }
        
     // Clear DBG HIT reg
@@ -1247,7 +1265,7 @@ static int rvl_profiling(struct target *target, uint32_t *samples,
 
 	for (;;) {
 		uint32_t reg_value;
-		retval = du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_GPRS + 0x201) /* NPC */, 1, &reg_value);
+		retval = du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_GPRS + 0x201) /* PPC */, 1, &reg_value);
 		if (retval != ERROR_OK) {
 			LOG_ERROR("Error while reading NPC");
 			return retval;
