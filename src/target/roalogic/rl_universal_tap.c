@@ -1,8 +1,12 @@
 /***************************************************************************
  *   Copyright (C) 2021 by Richard Herveille                               *
  *   richard.herveille@roalogic.com                                        *
- *
- *   Based on OR1k Version
+ *                                                                         *
+ *   Copyright (C) 2021 by Bjorn Schouteten                                *
+ *   bjorn.schouteten@roalogic.com                                         *
+ *                                                                         * 
+ *                                                                         *
+ *   Based on OR1k Version                                                 *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
