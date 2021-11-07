@@ -272,9 +272,9 @@ static int adbg_ctrl_read(struct rl_jtag *jtag_info, uint32_t regidx,
 		return retval;
 	}
 
-    int      cpusel = 0;
-	int cpusel_len;
-	int opcode_len;
+	int      cpusel = 0;
+	int      cpusel_len;
+	int      opcode_len;
 	uint32_t opcode;
 
 	/* There is no 'read' command, We write a NOP to read */
@@ -306,7 +306,7 @@ static int adbg_ctrl_read(struct rl_jtag *jtag_info, uint32_t regidx,
 	field[0].out_value = NULL;
 	field[0].in_value  = (uint8_t *)data;
 
-	field[1].num_bits  = opcode_len + 1;
+	field[1].num_bits  = opcode_len + cpusel_len + 1;
 	field[1].out_value = (uint8_t *)&outdata;
 	field[1].in_value  = NULL;
 
@@ -333,7 +333,7 @@ static int adbg_burst_command(struct rl_jtag *jtag_info,
 
 
 	/* Total bitcount */
-    bitcount  = 1;            //1bit module command
+	bitcount  = 1;            //1bit module command
 	bitcount += opcode_len;   //4bit opcode
 	bitcount += cpusel_len;   //4bit CPU select
 	bitcount += address_len;  //Address
@@ -742,9 +742,9 @@ static int rl_adv_cpu_stall(struct rl_jtag *jtag_info, int action)
 	if (retval != ERROR_OK)
 		return retval;
 
-	//TODO: the '1' length should be NumberOfCPU
+	//TODO: the '2' length should be NumberOfCPU
 	uint32_t cpu_cr;
-	retval = adbg_ctrl_read(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 1);
+	retval = adbg_ctrl_read(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 2);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -757,7 +757,7 @@ static int rl_adv_cpu_stall(struct rl_jtag *jtag_info, int action)
 	if (retval != ERROR_OK)
 		return retval;
 
-        //TODO: the '1' length should be number of CPUs
+        //TODO: the '2' length should be number of CPUs
 	return adbg_ctrl_write(jtag_info, DBG_CPU_REG_STATUS, &cpu_cr, 2);
 }
 
