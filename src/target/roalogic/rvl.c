@@ -268,7 +268,7 @@ static int rvl_save_context(struct target *target)
 	    	{
 				// Read the PPC register
 				retval = du_core->rl_jtag_read_cpu(&rvl->jtag,
-						(GROUP_GPRS + 0x200), 1,
+						(GROUP_GPRS + 0x201), 1,
 						&rvl->core_regs[i]);
 
                 LOG_DEBUG("Read PC: Value: %08x\n", rvl->core_regs[i]);
@@ -413,27 +413,30 @@ static int rvl_set_core_reg(struct reg *reg, uint8_t *buf)
 	uint32_t value = buf_get_u32(buf, 0, 32);
 
 	LOG_DEBUG("-");
-    LOG_DEBUG("Set core reg: num: %u\n", rvl_reg->list_num);
+    LOG_DEBUG("Set core reg: %u, value: %08x\n", rvl_reg->list_num, value);
 
 	if (target->state != TARGET_HALTED)
 		return ERROR_TARGET_NOT_HALTED;
 
-	if (rvl_reg->list_num < GDB_REGNO_COUNT) 
+    // If the register is lower then the Floating Point registers, write it to the cache
+    // At the moment a continue or a step is provoked, it shall be written to the CPU
+    if (rvl_reg->list_num < GDB_REGNO_FPR0) 
     {
-        
-		buf_set_u32(reg->value, 0, 32, value);
-		reg->dirty = true;
-		reg->valid = true;
+
+        buf_set_u32(rvl->core_cache->reg_list[rvl_reg->list_num].value, 0, 32, value);
+		rvl->core_cache->reg_list[rvl_reg->list_num].dirty = true;
+		rvl->core_cache->reg_list[rvl_reg->list_num].valid = true;
 	} 
     else 
     {
-		/* This is an spr, write it to the HW */
-		int retval = du_core->rl_jtag_write_cpu(&rvl->jtag,
-							  rvl_reg->spr_num, 1, &value);
-		if (retval != ERROR_OK) {
-			LOG_ERROR("Error while writing spr 0x%08" PRIx32, rvl_reg->spr_num);
-			return retval;
-		}
+		/* Non cached register, so write to CPU immediately */
+        int retval = du_core->rl_jtag_write_cpu(&rvl->jtag, rvl_reg->spr_num, 1, &value);
+        
+        if (retval != ERROR_OK) 
+        {
+            LOG_ERROR("Error while writing spr 0x%08" PRIx32, rvl_reg->spr_num);
+            return retval;
+        }
 	}
 
 	return ERROR_OK;
@@ -515,9 +518,9 @@ static int rvl_debug_entry(struct target *target)
 
 	if (breakpoint_find(target, addr))
     {
-		/* Halted on a breakpoint, step back to permit executing the instruction there */
-		retval = rvl_set_core_reg(&rvl->core_cache->reg_list[GDB_REGNO_PC],
-					   (uint8_t *)&addr);
+        buf_set_u32(rvl->core_cache->reg_list[GDB_REGNO_PC].value, 0, 32, addr);
+		rvl->core_cache->reg_list[GDB_REGNO_PC].dirty = true;
+		rvl->core_cache->reg_list[GDB_REGNO_PC].valid = true;
     }
 
 	return retval;
@@ -613,17 +616,17 @@ static int rvl_poll(struct target *target)
 
 	/* check for processor halted */
 	if (!running) 
-	{
+    {
 		/* It's actually stalled, so update our software's state */
 		if ((target->state == TARGET_RUNNING) ||
 		    (target->state == TARGET_RESET)) 
-		{
+        {
 
 			target->state = TARGET_HALTED;
 
 			retval = rvl_debug_entry(target);
 			if (retval != ERROR_OK) 
-			{
+            {
 				LOG_ERROR("Error while calling rvl_debug_entry");
 				return retval;
 			}
@@ -636,7 +639,7 @@ static int rvl_poll(struct target *target)
 
 			retval = rvl_debug_entry(target);
 			if (retval != ERROR_OK) 
-			{
+            {
 				LOG_ERROR("Error while calling rvl_debug_entry");
 				return retval;
 			}
@@ -644,24 +647,24 @@ static int rvl_poll(struct target *target)
 			target_call_event_callbacks(target, TARGET_EVENT_DEBUG_HALTED);
 		}
 	} 
-	else 
-	{ /* ... target is running */
+    else 
+    { /* ... target is running */
 
 		/* If target was supposed to be stalled, stall it again */
 		if  (target->state == TARGET_HALTED) 
-		{
+        {
 			target->state = TARGET_RUNNING;
 
 			retval = rvl_halt(target);
 			if (retval != ERROR_OK) 
-			{
+            {
 				LOG_ERROR("Error while calling rvl_halt");
 				return retval;
 			}
 
 			retval = rvl_debug_entry(target);
 			if (retval != ERROR_OK) 
-			{
+            {
 				LOG_ERROR("Error while calling rvl_debug_entry");
 				return retval;
 			}
@@ -686,8 +689,8 @@ static int rvl_assert_reset(struct target *target)
 	int retval = du_core->rl_cpu_reset(&rvl->jtag, CPU_RESET);
 
 	if (retval != ERROR_OK) {
-		LOG_ERROR("Error while asserting RESET");
-		return retval;
+	 	LOG_ERROR("Error while asserting RESET");
+	 	return retval;
 	}
 
 	return ERROR_OK;
@@ -702,9 +705,9 @@ static int rvl_deassert_reset(struct target *target)
 
 	int retval = du_core->rl_cpu_reset(&rvl->jtag, CPU_NOT_RESET);
 	if (retval != ERROR_OK) 
-	{
-		LOG_ERROR("Error while deasserting RESET");
-		return retval;
+    {
+	 	LOG_ERROR("Error while deasserting RESET");
+	 	return retval;
 	}
 
 	return ERROR_OK;
@@ -748,6 +751,8 @@ static int rvl_soft_reset_halt(struct target *target)
 // 	return false;
 // }
 
+//static int rvl_
+
 static int rvl_resume_or_step(struct target *target, int current,
 			       uint32_t address, int handle_breakpoints,
 			       int debug_execution, int step)
@@ -756,8 +761,8 @@ static int rvl_resume_or_step(struct target *target, int current,
 	struct rl_du *du_core = rl_to_du(rvl);
 	struct breakpoint *breakpoint = NULL;
 	uint32_t resume_pc = 0;
-	uint32_t tempReg = 0;
-	int retval;
+    uint32_t tempReg = 0;
+    int retval;
 
 	LOG_DEBUG("Addr: 0x%" PRIx32 ", stepping: %s, handle breakpoints %s\n",
 		  address, step ? "yes" : "no", handle_breakpoints ? "yes" : "no");
@@ -767,65 +772,65 @@ static int rvl_resume_or_step(struct target *target, int current,
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
-	// Free memory
+    // Free memory
 	if (!debug_execution)
 		target_free_all_working_areas(target);
 
 	/* current ? continue on current pc : continue at <address> */
 	if (!current)
-	{
-		buf_set_u32(rvl->core_cache->reg_list[GDB_REGNO_PC].value, 0, 32, address);
-	}
+    {
+        buf_set_u32(rvl->core_cache->reg_list[GDB_REGNO_PC].value, 0, 32, address);
 
-	retval = rvl_restore_context(target);
-	if (retval != ERROR_OK) {
-		LOG_ERROR("Error while calling rvl_restore_context");
-		return retval;
-	}
+    }
+
+    retval = rvl_restore_context(target);
+    if (retval != ERROR_OK) {
+        LOG_ERROR("Error while calling rvl_restore_context");
+        return retval;
+    }
        
+    // Clear DBG HIT reg
+    tempReg = 0;
 
-	// Clear DBG HIT reg
-	tempReg = 0;
+    if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_DBG + 0x01), 1, &tempReg) != ERROR_OK)
+    {
+        printf("Error: cannot clear HIT reg\n");
+        return ERROR_FAIL;
+    }
 
-	if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_DBG + 0x01), 1, &tempReg) != ERROR_OK)
-	{
-		printf("Error: cannot clear HIT reg\n");
-		return ERROR_FAIL;
-	}
-
-	if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_DBG + 0x00), 1, &tempReg) != ERROR_OK)
-	{
-		printf("Error: cannot read DBG ctrl reg\n");
-		return ERROR_FAIL;
-	}
+    if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_DBG + 0x00), 1, &tempReg) != ERROR_OK)
+    {
+        printf("Error: cannot read DBG ctrl reg\n");
+        return ERROR_FAIL;
+    }
 
 	if (step)
-	{
+    {
 		/* Set the single step trigger in Debug Mode Register 1 (DMR1) */
 		tempReg |= DBG_CTRL_SINGLE_STEP_TRACE;
-	}
-	else
-	{
-		/* Clear the single step trigger in Debug Mode Register 1 (DMR1) */
+    }
+    else
+    {
+    	/* Clear the single step trigger in Debug Mode Register 1 (DMR1) */
 		tempReg &= ~DBG_CTRL_SINGLE_STEP_TRACE;
-	}
+    }
 
-	if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_DBG + 0x00), 1, &tempReg) != ERROR_OK)
-	{
-		printf("Error: cannot write DBG ctrl reg\n");
-		return ERROR_FAIL;
-	}
+    if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_DBG + 0x00), 1, &tempReg) != ERROR_OK)
+    {
+        printf("Error: cannot write DBG ctrl reg\n");
+        return ERROR_FAIL;
+    }
 
 
 	resume_pc = buf_get_u32(rvl->core_cache->reg_list[GDB_REGNO_PC].value, 0, 32);
 
 	/* The front-end may request us not to handle breakpoints */
 	if (handle_breakpoints) 
-	{
+    {
 		/* Single step past breakpoint at current address */
 		breakpoint = breakpoint_find(target, resume_pc);
 		if (breakpoint) 
-		{
+        {
 			LOG_DEBUG("Unset breakpoint at 0x%08" TARGET_PRIxADDR, breakpoint->address);
 			retval = rvl_remove_breakpoint(target, breakpoint);
 			if (retval != ERROR_OK)
@@ -836,7 +841,7 @@ static int rvl_resume_or_step(struct target *target, int current,
 	/* Unstall time */
 	retval = du_core->rl_cpu_stall(&rvl->jtag, CPU_UNSTALL);
 	if (retval != ERROR_OK) 
-	{
+    {
 		LOG_ERROR("Error while unstalling the CPU");
 		return retval;
 	}
@@ -849,14 +854,11 @@ static int rvl_resume_or_step(struct target *target, int current,
 	/* Registers are now invalid */
 	register_cache_invalidate(rvl->core_cache);
 
-	if (!debug_execution)
-       	{
+	if (!debug_execution) {
 		target->state = TARGET_RUNNING;
 		target_call_event_callbacks(target, TARGET_EVENT_RESUMED);
 		LOG_DEBUG("Target resumed at 0x%08" PRIx32, resume_pc);
-	}
-       	else
-       	{
+	} else {
 		target->state = TARGET_DEBUG_RUNNING;
 		target_call_event_callbacks(target, TARGET_EVENT_DEBUG_RESUMED);
 		LOG_DEBUG("Target debug resumed at 0x%08" PRIx32, resume_pc);
