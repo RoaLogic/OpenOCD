@@ -401,6 +401,14 @@ static int rvl_get_core_reg(struct reg *reg)
 	if (target->state != TARGET_HALTED)
 		return ERROR_TARGET_NOT_HALTED;
 
+    // First get the register before returning the values
+    int retval = rvl_save_context(target);
+
+	if (retval != ERROR_OK) {
+		LOG_ERROR("Error while calling rvl_save_context");
+		return retval;
+	}
+
 	return rvl_read_core_reg(target, rvl_reg->list_num);
 }
 
