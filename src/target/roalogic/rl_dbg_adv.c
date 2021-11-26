@@ -36,7 +36,7 @@
 
 static struct rl_du rl_dbg_adv;
 
-static const char * const chain_name[] = {"SYSBUS", "CPU", "JSP"};
+//static const char * const chain_name[] = {"SYSBUS", "CPU", "JSP"};
 
 static int rl_adv_jtag_write_cpu(struct rl_jtag *jtag_info,
 		uint32_t addr, int count, const uint32_t *value);
@@ -132,7 +132,7 @@ static int adbg_select_module(struct rl_jtag *jtag_info, int chain)
 	 */
 	uint8_t data = chain | (1 << DBG_MODULE_SELECT_REG_SIZE);
 
-	LOG_DEBUG("Select module: %s", chain_name[chain]);
+	//LOG_DEBUG("Select module: %s", chain_name[chain]);
 
 	struct scan_field field;
 

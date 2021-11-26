@@ -58,7 +58,7 @@ proc ocd_process_reset_inner { MODE } {
 
 	# Use TRST or TMS/TCK operations to reset all the tap controllers.
 	# TAP reset events get reported; they might enable some taps.
-	init_reset $MODE
+	# init_reset $MODE
 
 	# Examine all targets on enabled taps.
 	foreach t $targets {
