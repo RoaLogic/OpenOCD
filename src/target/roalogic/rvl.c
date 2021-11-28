@@ -718,6 +718,14 @@ static int rvl_deassert_reset(struct target *target)
 	 	return retval;
 	}
 
+    // Set the correpsponding debug flags again, since those are cleared
+    retval = rvl_debug_entry(target);
+    if (retval != ERROR_OK) 
+    {
+        LOG_ERROR("Error while calling rvl_debug_entry");
+        return retval;
+    }
+
 	return ERROR_OK;
 }
 
@@ -770,6 +778,8 @@ static int rvl_resume_or_step(struct target *target, int current,
 	struct breakpoint *breakpoint = NULL;
 	uint32_t resume_pc = 0;
     uint32_t tempReg = 0;
+    uint32_t tempMStatusReg = 0;
+    bool globalInterruptActive = false;
     int retval;
 
 	LOG_DEBUG("Addr: 0x%" PRIx32 ", stepping: %s, handle breakpoints %s\n",
@@ -812,16 +822,40 @@ static int rvl_resume_or_step(struct target *target, int current,
         return ERROR_FAIL;
     }
 
+    if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_CSR  + CSR_MSTATUS), 1, &tempMStatusReg) != ERROR_OK)
+    {
+        printf("Error: cannot read MSTATUS reg\n");
+        return ERROR_FAIL;
+    }
+
+    if(tempMStatusReg & DBG_CSR_MSTASUS_MIE)
+    {
+        globalInterruptActive = true;
+    }
+
 	if (step)
     {
 		/* Set the single step trigger in Debug Mode Register 1 (DMR1) */
 		tempReg |= DBG_CTRL_SINGLE_STEP_TRACE;
+
+        if(globalInterruptActive)
+        {
+            tempMStatusReg &= ~DBG_CSR_MSTASUS_MIE;
+
+            if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_CSR  + CSR_MSTATUS), 1, &tempMStatusReg) != ERROR_OK)
+            {
+                printf("Error: cannot read MSTATUS reg\n");
+                return ERROR_FAIL;
+            }
+        }
     }
     else
     {
     	/* Clear the single step trigger in Debug Mode Register 1 (DMR1) */
 		tempReg &= ~DBG_CTRL_SINGLE_STEP_TRACE;
     }
+
+
 
     if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_DBG + 0x00), 1, &tempReg) != ERROR_OK)
     {
@@ -855,12 +889,29 @@ static int rvl_resume_or_step(struct target *target, int current,
 	}
 
 	if (step)
-		target->debug_reason = DBG_REASON_SINGLESTEP;
+    {
+        target->debug_reason = DBG_REASON_SINGLESTEP;
+
+        if(globalInterruptActive)
+        {
+            if(du_core->rl_jtag_read_cpu(&rvl->jtag, (GROUP_CSR  + CSR_MSTATUS), 1, &tempMStatusReg) != ERROR_OK)
+            {
+                printf("Error: cannot read MSTATUS reg\n");
+                return ERROR_FAIL;
+            }
+            tempMStatusReg |= DBG_CSR_MSTASUS_MIE;
+
+            if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_CSR  + CSR_MSTATUS), 1, &tempMStatusReg) != ERROR_OK)
+            {
+                printf("Error: cannot read MSTATUS reg\n");
+                return ERROR_FAIL;
+            }
+        }
+    }
 	else
 		target->debug_reason = DBG_REASON_NOTHALTED;
 
-	/* Registers are now invalid */
-	register_cache_invalidate(rvl->core_cache);
+    // Instruction invalidate is in the DU_FLUSH
 
 	if (!debug_execution) {
 		target->state = TARGET_RUNNING;
@@ -973,15 +1024,7 @@ static int rvl_add_breakpoint(struct target *target,
                         (uint8_t*)&rvl_trap_insn);
     }
 
-    // TODO: Add instruction cache invalidation
-	/* invalidate instruction cache */
-	// uint32_t addr = breakpoint->address;
-	// retval = du_core->rl_jtag_write_cpu(&rvl->jtag,
-	// 		OR1K_ICBIR_CPU_REG_ADD, 1, &addr);
-	// if (retval != ERROR_OK) {
-	// 	LOG_ERROR("Error while invalidating the ICACHE");
-	// 	return retval;
-	// }
+    // Instruction invalidate is in the DU_FLUSH
 
 	return ERROR_OK;
 }
@@ -1037,16 +1080,7 @@ static int rvl_remove_breakpoint(struct target *target,
 	}
 
     
-
-    // TODO: Add instruction cache invalidation
-	/* invalidate instruction cache */
-	// uint32_t addr = breakpoint->address;
-	// retval = du_core->rl_jtag_write_cpu(&rvl->jtag,
-	// 		OR1K_ICBIR_CPU_REG_ADD, 1, &addr);
-	// if (retval != ERROR_OK) {
-	// 	LOG_ERROR("Error while invalidating the ICACHE");
-	// 	return retval;
-	// }
+    // Instruction invalidate is in the DU_FLUSH
 
 	return ERROR_OK;
 }

@@ -249,6 +249,8 @@ enum rvl_debug_reg_nums {
 //#define DBG_BPCTRL_CC_LDST_ADR		(0x3 << 4)
 //#define DBG_BPCTRL_CC_MASK              (0x7 << 4)
 
+#define DBG_CSR_MSTASUS_MIE         0x08
+
 #define DBG_IE_INST_MISALIGNED		0x00001
 #define DBG_IE_INST_ACCESS_FAULT	0x00002
 #define DBG_IE_ILLEGAL			0x00004
