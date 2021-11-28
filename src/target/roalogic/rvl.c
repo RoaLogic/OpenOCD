@@ -911,7 +911,9 @@ static int rvl_resume_or_step(struct target *target, int current,
 	else
 		target->debug_reason = DBG_REASON_NOTHALTED;
 
-    // Instruction invalidate is in the DU_FLUSH
+    // Invalidate current registers in local cache
+    // Nothing to do with CPU cache
+    register_cache_invalidate(rvl->core_cache);
 
 	if (!debug_execution) {
 		target->state = TARGET_RUNNING;
