@@ -515,7 +515,8 @@ static int rvl_debug_entry(struct target *target)
     struct rl_du *du_core = rl_to_du(rvl);
 	uint32_t addr = rvl->core_regs[GDB_REGNO_PC];
 
-    value |= DBG_IE_INST_MISALIGNED | DBG_IE_ILLEGAL | DBG_IE_BREAKPOINT | DBG_IE_LOAD_MISALIGNED | DBG_IE_AMO_MISALIGNED;
+    //value |= DBG_IE_INST_MISALIGNED | DBG_IE_ILLEGAL | DBG_IE_BREAKPOINT | DBG_IE_LOAD_MISALIGNED | DBG_IE_AMO_MISALIGNED;
+    value |= DBG_IE_BREAKPOINT;
 
     // printf("Set DBG IE with value: %08x\n", value);
     if(du_core->rl_jtag_write_cpu(&rvl->jtag, (GROUP_DBG + 0x02), 1, &value) != ERROR_OK)
